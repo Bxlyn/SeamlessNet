@@ -1,5 +1,7 @@
 FROM gcc:latest
 
+USER root
+
 # Install dependencies
 RUN apt-get update && apt-get install -y \
     git \
@@ -7,12 +9,16 @@ RUN apt-get update && apt-get install -y \
     make \
     pkg-config \
     libssl-dev \
+    openssl \
     iproute2 \
     iputils-ping \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Build picoquic
+# -----------------------------
+# Build Picoquic
+# -----------------------------
+
 WORKDIR /usr/local
 
 RUN git clone https://github.com/private-octopus/picoquic.git
@@ -22,18 +28,12 @@ WORKDIR /usr/local/picoquic
 RUN cmake -DPICOQUIC_FETCH_PTLS=Y . \
     && make -j$(nproc)
 
-# Copy SeamlessNet source code
+# -----------------------------
+# SeamlessNet
+# -----------------------------
+
 WORKDIR /usr/local/SeamlessNet
 
 COPY . .
-
-# Create non-root user
-RUN useradd -m -s /bin/bash jigabit \
-    && chown -R jigabit:jigabit /usr/local/SeamlessNet \
-    && chown -R jigabit:jigabit /usr/local/picoquic
-
-USER jigabit
-
-WORKDIR /usr/local/SeamlessNet
 
 CMD ["bash"]
