@@ -34,8 +34,18 @@ static int server_callback(
         break;
 
     case picoquic_callback_stream_fin:
+        if (length > 0)
+        {
+            printf("[SERVER] Received on stream %llu: ",
+                (unsigned long long)stream_id);
+
+            fwrite(bytes, 1, length, stdout);
+            printf("\n");
+        }
+
         printf("[SERVER] Stream %llu finished\n",
-               (unsigned long long)stream_id);
+            (unsigned long long)stream_id);
+
         fflush(stdout);
         break;
 
