@@ -3,12 +3,13 @@
 int start_picoquic_server(
     int port,
     const char* cert_file,
-    const char* key_file
-);
+    const char* key_file);
 
 int main(void)
 {
-    printf("Starting SeamlessNet server...\n");
+    printf("=============================\n");
+    printf(" SeamlessNet QUIC Server\n");
+    printf("=============================\n");
 
     return start_picoquic_server(
         4433,

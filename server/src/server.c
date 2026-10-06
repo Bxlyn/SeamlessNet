@@ -1,7 +1,8 @@
 #include "picoquic.h"
+#include "picoquic_packet_loop.h"
 
 #include <stdio.h>
-#include <string.h>
+#include <stdint.h>
 
 static int server_callback(
     picoquic_cnx_t* cnx,
@@ -16,22 +17,20 @@ static int server_callback(
     (void)callback_ctx;
     (void)stream_ctx;
 
-    switch (event) {
-
+    switch (event)
+    {
     case picoquic_callback_ready:
-        printf("[SERVER] QUIC connection established\n");
+        printf("[SERVER] QUIC connection established!\n");
         fflush(stdout);
         break;
 
     case picoquic_callback_stream_data:
-        printf("[SERVER] Received %zu bytes on stream %llu: ",
-               length,
+        printf("[SERVER] Received on stream %llu: ",
                (unsigned long long)stream_id);
 
         fwrite(bytes, 1, length, stdout);
         printf("\n");
         fflush(stdout);
-
         break;
 
     case picoquic_callback_stream_fin:
@@ -45,6 +44,16 @@ static int server_callback(
         fflush(stdout);
         break;
 
+    case picoquic_callback_application_close:
+        printf("[SERVER] Application closed connection\n");
+        fflush(stdout);
+        break;
+
+    case picoquic_callback_stateless_reset:
+        printf("[SERVER] Stateless reset\n");
+        fflush(stdout);
+        break;
+
     default:
         break;
     }
@@ -52,11 +61,15 @@ static int server_callback(
     return 0;
 }
 
-int start_picoquic_server(int port,
-                          const char* cert_file,
-                          const char* key_file)
+
+int start_picoquic_server(
+    int port,
+    const char* cert_file,
+    const char* key_file)
 {
     uint64_t current_time = picoquic_current_time();
+
+    printf("[SERVER] Creating QUIC context...\n");
 
     picoquic_quic_t* quic = picoquic_create(
         8,
@@ -76,27 +89,27 @@ int start_picoquic_server(int port,
         0
     );
 
-    if (quic == NULL) {
+    if (quic == NULL)
+    {
         fprintf(stderr, "[SERVER] Failed to create QUIC context\n");
         return -1;
     }
 
-    picoquic_packet_loop_param_t param = { 0 };
-    param.local_af = AF_INET;
-    param.local_port = port;
-
     printf("[SERVER] Listening on UDP port %d...\n", port);
     fflush(stdout);
 
-    /*
-     * The server waits for incoming QUIC packets.
-     */
-    int ret = picoquic_packet_loop_v3(
+    int ret = picoquic_packet_loop(
         quic,
-        &param,
+        port,
+        AF_INET,
+        0,
+        0,
+        0,
         NULL,
         NULL
     );
+
+    printf("[SERVER] Packet loop stopped: %d\n", ret);
 
     picoquic_free(quic);
 
