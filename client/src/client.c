@@ -12,10 +12,16 @@
 #include <stdatomic.h>
 
 
-#define PACKET_MAX      1000
-#define PACKET_QUEUE    64
+#define PACKET_MAX 1000
+#define PACKET_QUEUE 64
+
+/* 5 minutes */
 #define SEAMLESSNET_IDLE_TIMEOUT_MS 300000
 
+
+/* =========================================================
+ * Packet queue
+ * ========================================================= */
 
 typedef struct
 {
@@ -24,6 +30,10 @@ typedef struct
 
 } tunnel_packet_t;
 
+
+/* =========================================================
+ * Client context
+ * ========================================================= */
 
 typedef struct
 {
@@ -39,12 +49,21 @@ typedef struct
 
     atomic_int connected;
 
+    /*
+     * TUN file descriptor.
+     *
+     * Used for return traffic:
+     *
+     * QUIC -> client -> write(tun0) -> Linux
+     */
+    int tun_fd;
+
 } client_ctx_t;
 
 
-/* ---------------------------------------------------------
- * Queue helpers
- * --------------------------------------------------------- */
+/* =========================================================
+ * Queue packet
+ * ========================================================= */
 
 static int queue_packet(
     client_ctx_t* ctx,
@@ -62,7 +81,9 @@ static int queue_packet(
         return -1;
     }
 
+
     pthread_mutex_lock(&ctx->mutex);
+
 
     if (ctx->count >= PACKET_QUEUE)
     {
@@ -76,8 +97,10 @@ static int queue_packet(
         return -1;
     }
 
+
     tunnel_packet_t* packet =
         &ctx->packets[ctx->tail];
+
 
     memcpy(
         packet->data,
@@ -85,18 +108,27 @@ static int queue_packet(
         length
     );
 
+
     packet->length = length;
+
 
     ctx->tail =
         (ctx->tail + 1) % PACKET_QUEUE;
 
+
     ctx->count++;
 
+
     pthread_mutex_unlock(&ctx->mutex);
+
 
     return 0;
 }
 
+
+/* =========================================================
+ * Dequeue packet
+ * ========================================================= */
 
 static int dequeue_packet(
     client_ctx_t* ctx,
@@ -104,57 +136,36 @@ static int dequeue_packet(
 {
     pthread_mutex_lock(&ctx->mutex);
 
+
     if (ctx->count == 0)
     {
         pthread_mutex_unlock(&ctx->mutex);
+
         return 0;
     }
+
 
     *output =
         ctx->packets[ctx->head];
 
+
     ctx->head =
         (ctx->head + 1) % PACKET_QUEUE;
 
+
     ctx->count--;
 
+
     pthread_mutex_unlock(&ctx->mutex);
+
 
     return 1;
 }
 
-static void print_close_reason(
-    picoquic_cnx_t* cnx)
-{
-    uint64_t local_reason = 0;
-    uint64_t remote_reason = 0;
-    uint64_t local_app_reason = 0;
-    uint64_t remote_app_reason = 0;
 
-    picoquic_get_close_reasons(
-        cnx,
-        &local_reason,
-        &remote_reason,
-        &local_app_reason,
-        &remote_app_reason
-    );
-
-    printf(
-        "[QUIC] Connection closed\n"
-        "       local transport:  %llu\n"
-        "       remote transport: %llu\n"
-        "       local app:        %llu\n"
-        "       remote app:       %llu\n",
-        (unsigned long long)local_reason,
-        (unsigned long long)remote_reason,
-        (unsigned long long)local_app_reason,
-        (unsigned long long)remote_app_reason
-    );
-}
-
-/* ---------------------------------------------------------
- * Picoquic application callback
- * --------------------------------------------------------- */
+/* =========================================================
+ * Picoquic client callback
+ * ========================================================= */
 
 static int client_callback(
     picoquic_cnx_t* cnx,
@@ -166,90 +177,217 @@ static int client_callback(
     void* stream_ctx)
 {
     (void)stream_id;
-    (void)bytes;
-    (void)length;
     (void)stream_ctx;
+
 
     client_ctx_t* ctx =
         (client_ctx_t*)callback_ctx;
 
+
     switch (event)
     {
-    case picoquic_callback_ready:
+        /* -------------------------------------------------
+         * QUIC connection ready
+         * ------------------------------------------------- */
 
-        printf(
-            "[CLIENT] QUIC connection established!\n"
-        );
-
-        ctx->cnx = cnx;
-
-        atomic_store(
-            &ctx->connected,
-            1
-        );
-
-        fflush(stdout);
-
-        break;
+        case picoquic_callback_ready:
+        {
+            printf(
+                "[CLIENT] QUIC connection established!\n"
+            );
 
 
-    case picoquic_callback_close:
-
-        atomic_store(
-            &ctx->connected,
-            0
-        );
-
-        print_close_reason(cnx);
-
-        break;
+            ctx->cnx = cnx;
 
 
-    case picoquic_callback_application_close:
-
-        printf(
-            "[CLIENT] Application closed connection\n"
-        );
-
-        atomic_store(
-            &ctx->connected,
-            0
-        );
-
-        break;
+            atomic_store(
+                &ctx->connected,
+                1
+            );
 
 
-    case picoquic_callback_stateless_reset:
+            fflush(stdout);
 
-        printf(
-            "[CLIENT] QUIC stateless reset\n"
-        );
-
-        atomic_store(
-            &ctx->connected,
-            0
-        );
-
-        break;
+            break;
+        }
 
 
-    default:
-        break;
+        /* -------------------------------------------------
+         * QUIC DATAGRAM received from server
+         *
+         * This is return traffic.
+         *
+         * Server
+         *   |
+         *   | QUIC DATAGRAM
+         *   v
+         * Client
+         *   |
+         *   | write()
+         *   v
+         * tun0
+         *   |
+         *   v
+         * Linux network stack
+         * ------------------------------------------------- */
+
+        case picoquic_callback_datagram:
+        {
+            printf(
+                "[CLIENT] QUIC -> TUN: received %zu bytes\n",
+                length
+            );
+
+
+            if (ctx->tun_fd < 0)
+            {
+                fprintf(
+                    stderr,
+                    "[CLIENT] Invalid TUN descriptor\n"
+                );
+
+                break;
+            }
+
+
+            ssize_t written =
+                write(
+                    ctx->tun_fd,
+                    bytes,
+                    length
+                );
+
+
+            if (written < 0)
+            {
+                perror(
+                    "[CLIENT] write(tun0)"
+                );
+            }
+            else if ((size_t)written != length)
+            {
+                fprintf(
+                    stderr,
+                    "[CLIENT] Partial TUN write: %zd/%zu\n",
+                    written,
+                    length
+                );
+            }
+            else
+            {
+                printf(
+                    "[CLIENT] Injected %zu-byte IP packet into tun0\n",
+                    length
+                );
+            }
+
+
+            fflush(stdout);
+
+            break;
+        }
+
+
+        /* -------------------------------------------------
+         * Normal QUIC close
+         * ------------------------------------------------- */
+
+        case picoquic_callback_close:
+        {
+            printf(
+                "[CLIENT] QUIC connection closed\n"
+            );
+
+
+            atomic_store(
+                &ctx->connected,
+                0
+            );
+
+
+            fflush(stdout);
+
+            break;
+        }
+
+
+        /* -------------------------------------------------
+         * Application close
+         * ------------------------------------------------- */
+
+        case picoquic_callback_application_close:
+        {
+            printf(
+                "[CLIENT] QUIC application close received\n"
+            );
+
+
+            atomic_store(
+                &ctx->connected,
+                0
+            );
+
+
+            fflush(stdout);
+
+            break;
+        }
+
+
+        /* -------------------------------------------------
+         * Stateless reset
+         * ------------------------------------------------- */
+
+        case picoquic_callback_stateless_reset:
+        {
+            printf(
+                "[CLIENT] QUIC stateless reset received\n"
+            );
+
+
+            atomic_store(
+                &ctx->connected,
+                0
+            );
+
+
+            fflush(stdout);
+
+            break;
+        }
+
+
+        default:
+            break;
     }
+
 
     return 0;
 }
 
 
-/* ---------------------------------------------------------
+/* =========================================================
  * Picoquic network-thread callback
  *
- * IMPORTANT:
+ * The TUN thread does NOT directly call Picoquic send
+ * operations.
  *
- * TUN thread only places packets in our queue.
+ * Instead:
  *
- * Picoquic operations happen here in Picoquic's own thread.
- * --------------------------------------------------------- */
+ * TUN thread
+ *     |
+ *     | queue packet
+ *     v
+ * packet queue
+ *     |
+ *     | wake Picoquic
+ *     v
+ * Picoquic network thread
+ *     |
+ *     | queue QUIC DATAGRAM
+ *     v
+ * network
+ * ========================================================= */
 
 static int client_loop_callback(
     picoquic_quic_t* quic,
@@ -260,27 +398,38 @@ static int client_loop_callback(
     (void)quic;
     (void)callback_arg;
 
+
     client_ctx_t* ctx =
         (client_ctx_t*)callback_ctx;
+
 
     if (ctx == NULL)
     {
         return PICOQUIC_ERROR_UNEXPECTED_ERROR;
     }
 
+
     if (cb_mode == picoquic_packet_loop_wake_up)
     {
+        /*
+         * Do not attempt to send packets when QUIC
+         * is disconnected.
+         */
         if (!atomic_load(&ctx->connected))
         {
             return 0;
         }
 
+
         tunnel_packet_t packet;
 
-        while (dequeue_packet(ctx, &packet))
+
+        while (dequeue_packet(
+            ctx,
+            &packet))
         {
             /*
-             * One TUN IP packet becomes one QUIC DATAGRAM.
+             * One IP packet becomes one QUIC DATAGRAM.
              */
             int ret =
                 picoquic_queue_datagram_frame(
@@ -288,6 +437,7 @@ static int client_loop_callback(
                     packet.length,
                     packet.data
                 );
+
 
             if (ret != 0)
             {
@@ -300,20 +450,25 @@ static int client_loop_callback(
                 return ret;
             }
 
+
             printf(
                 "[CLIENT] TUN -> QUIC: %zu bytes\n",
                 packet.length
             );
+
+
+            fflush(stdout);
         }
     }
+
 
     return 0;
 }
 
 
-/* ---------------------------------------------------------
+/* =========================================================
  * Start SeamlessNet client
- * --------------------------------------------------------- */
+ * ========================================================= */
 
 int start_picoquic_client(
     const char* server_ip,
@@ -321,7 +476,13 @@ int start_picoquic_client(
 {
     int ret = 0;
 
+
+    /* -----------------------------------------------------
+     * Initialise client context
+     * ----------------------------------------------------- */
+
     client_ctx_t ctx;
+
 
     memset(
         &ctx,
@@ -329,10 +490,15 @@ int start_picoquic_client(
         sizeof(ctx)
     );
 
+
+    ctx.tun_fd = -1;
+
+
     pthread_mutex_init(
         &ctx.mutex,
         NULL
     );
+
 
     atomic_init(
         &ctx.connected,
@@ -340,29 +506,42 @@ int start_picoquic_client(
     );
 
 
-    /* -----------------------------------------------------
-     * Create TUN
-     * ----------------------------------------------------- */
+    /* =====================================================
+     * Create TUN interface
+     * ===================================================== */
 
     int tun_fd =
         tun_create("tun0");
 
+
     if (tun_fd < 0)
     {
+        pthread_mutex_destroy(
+            &ctx.mutex
+        );
+
         return -1;
     }
+
+
+    ctx.tun_fd = tun_fd;
 
 
     if (tun_configure("tun0") != 0)
     {
         close(tun_fd);
+
+        pthread_mutex_destroy(
+            &ctx.mutex
+        );
+
         return -1;
     }
 
 
-    /* -----------------------------------------------------
-     * Create Picoquic
-     * ----------------------------------------------------- */
+    /* =====================================================
+     * Create Picoquic context
+     * ===================================================== */
 
     uint64_t current_time =
         picoquic_current_time();
@@ -395,32 +574,52 @@ int start_picoquic_client(
             "[CLIENT] Failed to create QUIC context\n"
         );
 
+
         close(tun_fd);
+
+
+        pthread_mutex_destroy(
+            &ctx.mutex
+        );
+
 
         return -1;
     }
 
-    /*
-    * Prototype: keep an idle tunnel alive for 5 minutes.
-    */
+
+    /* -----------------------------------------------------
+     * Prototype idle timeout
+     *
+     * Default Picoquic idle timeout is about 30 seconds.
+     *
+     * For the Stage 1 prototype we use 5 minutes.
+     * ----------------------------------------------------- */
+
     picoquic_set_default_idle_timeout(
         quic,
         SEAMLESSNET_IDLE_TIMEOUT_MS
     );
 
+
     /*
-     * Development certificate configuration.
+     * DEVELOPMENT ONLY.
+     *
+     * Allows our self-signed server certificate.
      */
     picoquic_set_null_verifier(quic);
 
 
-    /*
-     * Enable QUIC DATAGRAM support.
-     */
+    /* -----------------------------------------------------
+     * Enable QUIC DATAGRAM support
+     * ----------------------------------------------------- */
+
     picoquic_tp_t tp =
         *picoquic_get_default_tp(quic);
 
-    tp.max_datagram_frame_size = 65535;
+
+    tp.max_datagram_frame_size =
+        65535;
+
 
     picoquic_set_default_tp(
         quic,
@@ -428,11 +627,12 @@ int start_picoquic_client(
     );
 
 
-    /* -----------------------------------------------------
-     * Server address
-     * ----------------------------------------------------- */
+    /* =====================================================
+     * Configure server address
+     * ===================================================== */
 
     struct sockaddr_in server_address;
+
 
     memset(
         &server_address,
@@ -440,11 +640,15 @@ int start_picoquic_client(
         sizeof(server_address)
     );
 
+
     server_address.sin_family =
         AF_INET;
 
+
     server_address.sin_port =
-        htons((uint16_t)port);
+        htons(
+            (uint16_t)port
+        );
 
 
     if (inet_pton(
@@ -454,19 +658,27 @@ int start_picoquic_client(
     {
         fprintf(
             stderr,
-            "[CLIENT] Invalid server IP\n"
+            "[CLIENT] Invalid server IP: %s\n",
+            server_ip
         );
 
+
         picoquic_free(quic);
+
         close(tun_fd);
+
+        pthread_mutex_destroy(
+            &ctx.mutex
+        );
+
 
         return -1;
     }
 
 
-    /* -----------------------------------------------------
+    /* =====================================================
      * Create QUIC connection
-     * ----------------------------------------------------- */
+     * ===================================================== */
 
     picoquic_cnx_t* cnx =
         picoquic_create_cnx(
@@ -489,8 +701,15 @@ int start_picoquic_client(
             "[CLIENT] Failed to create QUIC connection\n"
         );
 
+
         picoquic_free(quic);
+
         close(tun_fd);
+
+        pthread_mutex_destroy(
+            &ctx.mutex
+        );
+
 
         return -1;
     }
@@ -506,8 +725,14 @@ int start_picoquic_client(
     );
 
 
+    /* =====================================================
+     * Start client connection
+     * ===================================================== */
+
     ret =
-        picoquic_start_client_cnx(cnx);
+        picoquic_start_client_cnx(
+            cnx
+        );
 
 
     if (ret != 0)
@@ -518,8 +743,15 @@ int start_picoquic_client(
             ret
         );
 
+
         picoquic_free(quic);
+
         close(tun_fd);
+
+        pthread_mutex_destroy(
+            &ctx.mutex
+        );
+
 
         return ret;
     }
@@ -532,13 +764,16 @@ int start_picoquic_client(
     );
 
 
-    /* -----------------------------------------------------
+    /* =====================================================
      * Start Picoquic network thread
-     * ----------------------------------------------------- */
+     * ===================================================== */
 
-    picoquic_packet_loop_param_t param = {0};
+    picoquic_packet_loop_param_t param =
+        {0};
 
-    param.local_af = AF_INET;
+
+    param.local_af =
+        AF_INET;
 
 
     picoquic_network_thread_ctx_t* network_thread =
@@ -558,8 +793,15 @@ int start_picoquic_client(
             "[CLIENT] Failed to start network thread\n"
         );
 
+
         picoquic_free(quic);
+
         close(tun_fd);
+
+        pthread_mutex_destroy(
+            &ctx.mutex
+        );
+
 
         return -1;
     }
@@ -570,6 +812,10 @@ int start_picoquic_client(
     );
 
 
+    /* -----------------------------------------------------
+     * Wait for handshake
+     * ----------------------------------------------------- */
+
     while (!atomic_load(&ctx.connected))
     {
         usleep(10000);
@@ -577,25 +823,29 @@ int start_picoquic_client(
 
 
     printf("\n");
-    printf("=============================\n");
-    printf(" SeamlessNet tunnel active\n");
-    printf("=============================\n");
-    printf("TUN:       tun0\n");
-    printf("TUN IP:    10.10.0.1/24\n");
-    printf("Server:    %s:%d\n", server_ip, port);
-    printf("Transport: QUIC DATAGRAM\n");
-    printf("=============================\n\n");
+    printf("=====================================\n");
+    printf("       SeamlessNet Tunnel Active\n");
+    printf("=====================================\n");
+    printf("TUN:          tun0\n");
+    printf("TUN IP:       10.10.0.1/24\n");
+    printf("Server:       %s:%d\n", server_ip, port);
+    printf("Transport:    QUIC DATAGRAM\n");
+    printf("Idle timeout: 300 seconds\n");
+    printf("=====================================\n");
+    printf("\n");
+
 
     printf(
         "[CLIENT] Waiting for TUN packets...\n"
     );
 
 
-    /* -----------------------------------------------------
+    /* =====================================================
      * TUN capture loop
-     * ----------------------------------------------------- */
+     * ===================================================== */
 
     uint8_t packet[PACKET_MAX];
+
 
     while (1)
     {
@@ -609,15 +859,36 @@ int start_picoquic_client(
 
         if (length < 0)
         {
-            perror("[TUN] read");
+            perror(
+                "[TUN] read"
+            );
+
             break;
         }
 
 
         printf(
-            "[TUN] Captured %zd byte IP packet\n",
+            "[TUN] Captured %zd-byte IP packet\n",
             length
         );
+
+
+        /*
+         * During Stage 1 we deliberately DO NOT
+         * reconnect automatically.
+         *
+         * This makes it obvious if the QUIC
+         * connection actually died.
+         */
+        if (!atomic_load(&ctx.connected))
+        {
+            fprintf(
+                stderr,
+                "[CLIENT] QUIC disconnected - dropping TUN packet\n"
+            );
+
+            continue;
+        }
 
 
         if (queue_packet(
@@ -626,10 +897,8 @@ int start_picoquic_client(
                 (size_t)length) == 0)
         {
             /*
-             * Wake Picoquic.
-             *
-             * Picoquic's thread will then pull the packet
-             * from our queue and queue the QUIC DATAGRAM.
+             * Tell Picoquic's network thread that
+             * application data is waiting.
              */
             picoquic_wake_up_network_thread(
                 network_thread
@@ -638,17 +907,34 @@ int start_picoquic_client(
     }
 
 
+    /* =====================================================
+     * Cleanup
+     * ===================================================== */
+
+    printf(
+        "[CLIENT] Shutting down...\n"
+    );
+
+
     picoquic_delete_network_thread(
         network_thread
     );
 
-    picoquic_free(quic);
 
-    close(tun_fd);
+    picoquic_free(
+        quic
+    );
+
+
+    close(
+        tun_fd
+    );
+
 
     pthread_mutex_destroy(
         &ctx.mutex
     );
+
 
     return 0;
 }
