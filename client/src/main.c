@@ -2,7 +2,8 @@
 
 int start_picoquic_client(
     const char* server_ip,
-    int port);
+    int port
+);
 
 int main(void)
 {
