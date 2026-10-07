@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     openssl \
     iproute2 \
     iputils-ping \
+    iptables \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
