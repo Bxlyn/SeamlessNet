@@ -6,6 +6,7 @@
 #include <string.h>
 #include <arpa/inet.h>
 
+#define SEAMLESSNET_IDLE_TIMEOUT_MS 300000
 
 static void print_ipv4_packet(
     const uint8_t* packet,
@@ -89,6 +90,34 @@ static void print_ipv4_packet(
     fflush(stdout);
 }
 
+static void print_close_reason(
+    picoquic_cnx_t* cnx)
+{
+    uint64_t local_reason = 0;
+    uint64_t remote_reason = 0;
+    uint64_t local_app_reason = 0;
+    uint64_t remote_app_reason = 0;
+
+    picoquic_get_close_reasons(
+        cnx,
+        &local_reason,
+        &remote_reason,
+        &local_app_reason,
+        &remote_app_reason
+    );
+
+    printf(
+        "[QUIC] Connection closed\n"
+        "       local transport:  %llu\n"
+        "       remote transport: %llu\n"
+        "       local app:        %llu\n"
+        "       remote app:       %llu\n",
+        (unsigned long long)local_reason,
+        (unsigned long long)remote_reason,
+        (unsigned long long)local_app_reason,
+        (unsigned long long)remote_app_reason
+    );
+}
 
 static int server_callback(
     picoquic_cnx_t* cnx,
@@ -135,9 +164,7 @@ static int server_callback(
 
     case picoquic_callback_close:
 
-        printf(
-            "[SERVER] Connection closed\n"
-        );
+        print_close_reason(cnx);
 
         break;
 
@@ -198,7 +225,13 @@ int start_picoquic_server(
 
         return -1;
     }
-
+    /*
+ * Prototype: keep an idle tunnel alive for 5 minutes.
+ */
+    picoquic_set_default_idle_timeout(
+        quic,
+        SEAMLESSNET_IDLE_TIMEOUT_MS
+    );
 
     /*
      * Tell the client that this server supports
