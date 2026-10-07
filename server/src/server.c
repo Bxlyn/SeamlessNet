@@ -1,111 +1,191 @@
 #include "picoquic.h"
 #include "picoquic_packet_loop.h"
+#include "tun.h"
 
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+
+#include <pthread.h>
+#include <stdatomic.h>
+
 #include <arpa/inet.h>
 
 
-#define MAX_TUN_PACKET 2000
+#define PACKET_MAX 1000
+#define PACKET_QUEUE 64
 
-/* 5 minutes */
 #define SEAMLESSNET_IDLE_TIMEOUT_MS 300000
 
 
 /* =========================================================
- * Internet checksum
- *
- * Used for:
- *
- * - IPv4 header checksum
- * - ICMP checksum
+ * Packet structure
  * ========================================================= */
 
-static uint16_t internet_checksum(
+typedef struct
+{
+    uint8_t data[PACKET_MAX];
+    size_t length;
+
+} tunnel_packet_t;
+
+
+/* =========================================================
+ * Server context
+ *
+ * Stage 1 currently supports one active client.
+ * ========================================================= */
+
+typedef struct
+{
+    tunnel_packet_t packets[PACKET_QUEUE];
+
+    int head;
+    int tail;
+    int count;
+
+    pthread_mutex_t mutex;
+
+    picoquic_cnx_t* cnx;
+
+    atomic_int connected;
+
+    int tun_fd;
+
+} server_ctx_t;
+
+
+/* =========================================================
+ * Queue outgoing packet
+ *
+ * These are packets Linux gives us from server tun0 that
+ * need to travel back to the client.
+ * ========================================================= */
+
+static int queue_packet(
+    server_ctx_t* ctx,
     const uint8_t* data,
     size_t length)
 {
-    uint32_t sum = 0;
-
-
-    while (length >= 2)
+    if (length > PACKET_MAX)
     {
-        uint16_t word =
-            ((uint16_t)data[0] << 8) |
-            ((uint16_t)data[1]);
+        fprintf(
+            stderr,
+            "[SERVER] Dropping oversized return packet: %zu bytes\n",
+            length
+        );
 
-
-        sum += word;
-
-
-        data += 2;
-
-        length -= 2;
+        return -1;
     }
 
 
-    /*
-     * Handle odd byte.
-     */
-    if (length == 1)
+    pthread_mutex_lock(
+        &ctx->mutex
+    );
+
+
+    if (ctx->count >= PACKET_QUEUE)
     {
-        sum +=
-            ((uint16_t)data[0] << 8);
+        pthread_mutex_unlock(
+            &ctx->mutex
+        );
+
+        fprintf(
+            stderr,
+            "[SERVER] Return packet queue full - dropping packet\n"
+        );
+
+        return -1;
     }
 
 
-    /*
-     * Fold carry bits.
-     */
-    while (sum >> 16)
-    {
-        sum =
-            (sum & 0xffff) +
-            (sum >> 16);
-    }
+    tunnel_packet_t* packet =
+        &ctx->packets[ctx->tail];
 
 
-    return
-        (uint16_t)(~sum);
+    memcpy(
+        packet->data,
+        data,
+        length
+    );
+
+
+    packet->length =
+        length;
+
+
+    ctx->tail =
+        (ctx->tail + 1) % PACKET_QUEUE;
+
+
+    ctx->count++;
+
+
+    pthread_mutex_unlock(
+        &ctx->mutex
+    );
+
+
+    return 0;
 }
 
 
 /* =========================================================
- * Store 16-bit checksum in network byte order
+ * Dequeue outgoing packet
  * ========================================================= */
 
-static void store_checksum(
-    uint8_t* field,
-    uint16_t checksum)
+static int dequeue_packet(
+    server_ctx_t* ctx,
+    tunnel_packet_t* output)
 {
-    field[0] =
-        (uint8_t)(
-            checksum >> 8
-        );
+    pthread_mutex_lock(
+        &ctx->mutex
+    );
 
 
-    field[1] =
-        (uint8_t)(
-            checksum & 0xff
+    if (ctx->count == 0)
+    {
+        pthread_mutex_unlock(
+            &ctx->mutex
         );
+
+        return 0;
+    }
+
+
+    *output =
+        ctx->packets[ctx->head];
+
+
+    ctx->head =
+        (ctx->head + 1) % PACKET_QUEUE;
+
+
+    ctx->count--;
+
+
+    pthread_mutex_unlock(
+        &ctx->mutex
+    );
+
+
+    return 1;
 }
 
 
 /* =========================================================
- * Print IPv4 packet information
+ * Basic IP packet logging
  * ========================================================= */
 
 static void print_ipv4_packet(
     const uint8_t* packet,
-    size_t length)
+    size_t length,
+    const char* direction)
 {
     if (length < 20)
     {
-        printf(
-            "[SERVER] Packet too short for IPv4\n"
-        );
-
         return;
     }
 
@@ -116,11 +196,6 @@ static void print_ipv4_packet(
 
     if (version != 4)
     {
-        printf(
-            "[SERVER] Non-IPv4 packet, version=%u\n",
-            version
-        );
-
         return;
     }
 
@@ -155,261 +230,38 @@ static void print_ipv4_packet(
         packet[9];
 
 
-    printf("\n");
-    printf("---------------------------------\n");
-    printf("[SERVER] Recovered IP packet\n");
-    printf("Length:      %zu bytes\n", length);
-    printf("Source:      %s\n", source);
-    printf("Destination: %s\n", destination);
-    printf("Protocol:    %u", protocol);
+    printf(
+        "[SERVER] %s | %s -> %s | %zu bytes | protocol=%u",
+        direction,
+        source,
+        destination,
+        length,
+        protocol
+    );
 
 
     if (protocol == 1)
     {
-        printf(" (ICMP)");
+        printf(" ICMP");
     }
     else if (protocol == 6)
     {
-        printf(" (TCP)");
+        printf(" TCP");
     }
     else if (protocol == 17)
     {
-        printf(" (UDP)");
+        printf(" UDP");
     }
 
 
     printf("\n");
-    printf("---------------------------------\n");
-
 
     fflush(stdout);
 }
 
 
 /* =========================================================
- * Build ICMP Echo Reply
- *
- * Input:
- *
- *     10.10.0.1 -> 10.10.0.2
- *     ICMP Echo Request
- *
- * Output:
- *
- *     10.10.0.2 -> 10.10.0.1
- *     ICMP Echo Reply
- *
- * Return:
- *
- *      0 = reply generated
- *      1 = valid packet but not Echo Request
- *     -1 = invalid packet
- * ========================================================= */
-
-static int build_icmp_echo_reply(
-    const uint8_t* packet,
-    size_t packet_length,
-    uint8_t* reply,
-    size_t* reply_length)
-{
-    /* -----------------------------------------------------
-     * Validate minimum IPv4 header
-     * ----------------------------------------------------- */
-
-    if (packet_length < 20)
-    {
-        return -1;
-    }
-
-
-    uint8_t version =
-        packet[0] >> 4;
-
-
-    if (version != 4)
-    {
-        return -1;
-    }
-
-
-    /* -----------------------------------------------------
-     * IPv4 header length
-     *
-     * IHL is measured in 32-bit words.
-     * ----------------------------------------------------- */
-
-    size_t ip_header_length =
-        (packet[0] & 0x0f) * 4;
-
-
-    if (ip_header_length < 20 ||
-        ip_header_length > packet_length)
-    {
-        return -1;
-    }
-
-
-    /* -----------------------------------------------------
-     * IPv4 total packet length
-     * ----------------------------------------------------- */
-
-    size_t total_length =
-        ((size_t)packet[2] << 8) |
-        packet[3];
-
-
-    if (total_length < ip_header_length ||
-        total_length > packet_length ||
-        total_length > MAX_TUN_PACKET)
-    {
-        return -1;
-    }
-
-
-    /* -----------------------------------------------------
-     * IPv4 protocol 1 = ICMP
-     * ----------------------------------------------------- */
-
-    if (packet[9] != 1)
-    {
-        return 1;
-    }
-
-
-    /*
-     * ICMP header requires at least 8 bytes.
-     */
-    if (total_length <
-        ip_header_length + 8)
-    {
-        return -1;
-    }
-
-
-    size_t icmp_offset =
-        ip_header_length;
-
-
-    /* -----------------------------------------------------
-     * ICMP type:
-     *
-     * 8 = Echo Request
-     * 0 = Echo Reply
-     * ----------------------------------------------------- */
-
-    if (packet[icmp_offset] != 8)
-    {
-        return 1;
-    }
-
-
-    /* -----------------------------------------------------
-     * Copy original packet
-     * ----------------------------------------------------- */
-
-    memcpy(
-        reply,
-        packet,
-        total_length
-    );
-
-
-    /* -----------------------------------------------------
-     * Swap source/destination IPv4 addresses
-     * ----------------------------------------------------- */
-
-    uint8_t temp_address[4];
-
-
-    memcpy(
-        temp_address,
-        reply + 12,
-        4
-    );
-
-
-    memcpy(
-        reply + 12,
-        reply + 16,
-        4
-    );
-
-
-    memcpy(
-        reply + 16,
-        temp_address,
-        4
-    );
-
-
-    /* -----------------------------------------------------
-     * Set TTL
-     * ----------------------------------------------------- */
-
-    reply[8] = 64;
-
-
-    /* -----------------------------------------------------
-     * Echo Request -> Echo Reply
-     * ----------------------------------------------------- */
-
-    reply[icmp_offset] = 0;
-
-
-    /* =====================================================
-     * Recalculate ICMP checksum
-     * ===================================================== */
-
-    reply[icmp_offset + 2] = 0;
-
-    reply[icmp_offset + 3] = 0;
-
-
-    uint16_t icmp_checksum =
-        internet_checksum(
-            reply + icmp_offset,
-            total_length - icmp_offset
-        );
-
-
-    store_checksum(
-        reply + icmp_offset + 2,
-        icmp_checksum
-    );
-
-
-    /* =====================================================
-     * Recalculate IPv4 header checksum
-     * ===================================================== */
-
-    reply[10] = 0;
-
-    reply[11] = 0;
-
-
-    uint16_t ip_checksum =
-        internet_checksum(
-            reply,
-            ip_header_length
-        );
-
-
-    store_checksum(
-        reply + 10,
-        ip_checksum
-    );
-
-
-    *reply_length =
-        total_length;
-
-
-    return 0;
-}
-
-
-/* =========================================================
- * Picoquic server callback
+ * Picoquic connection callback
  * ========================================================= */
 
 static int server_callback(
@@ -422,20 +274,37 @@ static int server_callback(
     void* stream_ctx)
 {
     (void)stream_id;
-    (void)callback_ctx;
     (void)stream_ctx;
+
+
+    server_ctx_t* ctx =
+        (server_ctx_t*)callback_ctx;
 
 
     switch (event)
     {
         /* -------------------------------------------------
-         * Connection established
+         * Client connected
          * ------------------------------------------------- */
 
         case picoquic_callback_ready:
         {
             printf(
                 "[SERVER] QUIC connection established!\n"
+            );
+
+
+            /*
+             * Stage 1:
+             * only one client connection.
+             */
+            ctx->cnx =
+                cnx;
+
+
+            atomic_store(
+                &ctx->connected,
+                1
             );
 
 
@@ -446,99 +315,67 @@ static int server_callback(
 
 
         /* -------------------------------------------------
-         * Receive IP packet from client
+         * Client -> Server QUIC DATAGRAM
+         *
+         * The datagram contains one complete IP packet.
+         *
+         * Inject it into Linux through tun0.
          * ------------------------------------------------- */
 
         case picoquic_callback_datagram:
         {
             printf(
-                "[SERVER] QUIC DATAGRAM received: %zu bytes\n",
+                "[SERVER] QUIC -> TUN: received %zu bytes\n",
                 length
             );
 
 
-            /*
-             * Display the recovered original IP packet.
-             */
             print_ipv4_packet(
                 bytes,
-                length
+                length,
+                "CLIENT -> INTERNET"
             );
 
 
-            /* ---------------------------------------------
-             * Try to generate an ICMP Echo Reply.
-             * --------------------------------------------- */
-
-            uint8_t reply[
-                MAX_TUN_PACKET
-            ];
-
-
-            size_t reply_length =
-                0;
-
-
-            int result =
-                build_icmp_echo_reply(
-                    bytes,
-                    length,
-                    reply,
-                    &reply_length
-                );
-
-
-            if (result == 0)
+            if (ctx->tun_fd < 0)
             {
-                printf(
-                    "[SERVER] ICMP Echo Request detected\n"
+                fprintf(
+                    stderr,
+                    "[SERVER] Invalid TUN descriptor\n"
                 );
 
-
-                printf(
-                    "[SERVER] Building Echo Reply: %zu bytes\n",
-                    reply_length
-                );
-
-
-                /*
-                 * Send reconstructed IP packet back
-                 * through the same QUIC connection.
-                 */
-                int ret =
-                    picoquic_queue_datagram_frame(
-                        cnx,
-                        reply_length,
-                        reply
-                    );
-
-
-                if (ret != 0)
-                {
-                    fprintf(
-                        stderr,
-                        "[SERVER] Failed to queue return datagram: %d\n",
-                        ret
-                    );
-                }
-                else
-                {
-                    printf(
-                        "[SERVER] QUIC -> CLIENT: %zu bytes\n",
-                        reply_length
-                    );
-                }
+                break;
             }
-            else if (result == 1)
+
+
+            ssize_t written =
+                write(
+                    ctx->tun_fd,
+                    bytes,
+                    length
+                );
+
+
+            if (written < 0)
             {
-                printf(
-                    "[SERVER] Packet is not an ICMP Echo Request - ignoring\n"
+                perror(
+                    "[SERVER] write(tun0)"
+                );
+            }
+            else if ((size_t)written != length)
+            {
+                fprintf(
+                    stderr,
+                    "[SERVER] Partial TUN write: %zd/%zu\n",
+                    written,
+                    length
                 );
             }
             else
             {
                 printf(
-                    "[SERVER] Invalid IP packet\n"
+                    "[SERVER] Injected %zu-byte packet into server tun0\n",
+                    length
                 );
             }
 
@@ -560,21 +397,37 @@ static int server_callback(
             );
 
 
+            atomic_store(
+                &ctx->connected,
+                0
+            );
+
+
+            ctx->cnx =
+                NULL;
+
+
             fflush(stdout);
 
             break;
         }
 
-
-        /* -------------------------------------------------
-         * Application close
-         * ------------------------------------------------- */
 
         case picoquic_callback_application_close:
         {
             printf(
-                "[SERVER] QUIC application close received\n"
+                "[SERVER] QUIC application close\n"
             );
+
+
+            atomic_store(
+                &ctx->connected,
+                0
+            );
+
+
+            ctx->cnx =
+                NULL;
 
 
             fflush(stdout);
@@ -583,15 +436,21 @@ static int server_callback(
         }
 
 
-        /* -------------------------------------------------
-         * Stateless reset
-         * ------------------------------------------------- */
-
         case picoquic_callback_stateless_reset:
         {
             printf(
-                "[SERVER] QUIC stateless reset received\n"
+                "[SERVER] QUIC stateless reset\n"
             );
+
+
+            atomic_store(
+                &ctx->connected,
+                0
+            );
+
+
+            ctx->cnx =
+                NULL;
 
 
             fflush(stdout);
@@ -610,7 +469,95 @@ static int server_callback(
 
 
 /* =========================================================
- * Start SeamlessNet server
+ * Picoquic network-thread callback
+ *
+ * When Linux gives us a return packet through server tun0,
+ * the main thread puts it in our queue and wakes Picoquic.
+ *
+ * This callback executes inside Picoquic's network thread,
+ * where it is safe to call Picoquic APIs.
+ * ========================================================= */
+
+static int server_loop_callback(
+    picoquic_quic_t* quic,
+    picoquic_packet_loop_cb_enum cb_mode,
+    void* callback_ctx,
+    void* callback_arg)
+{
+    (void)quic;
+    (void)callback_arg;
+
+
+    server_ctx_t* ctx =
+        (server_ctx_t*)callback_ctx;
+
+
+    if (ctx == NULL)
+    {
+        return PICOQUIC_ERROR_UNEXPECTED_ERROR;
+    }
+
+
+    if (cb_mode ==
+        picoquic_packet_loop_wake_up)
+    {
+        if (!atomic_load(
+                &ctx->connected))
+        {
+            return 0;
+        }
+
+
+        if (ctx->cnx == NULL)
+        {
+            return 0;
+        }
+
+
+        tunnel_packet_t packet;
+
+
+        while (dequeue_packet(
+            ctx,
+            &packet))
+        {
+            int ret =
+                picoquic_queue_datagram_frame(
+                    ctx->cnx,
+                    packet.length,
+                    packet.data
+                );
+
+
+            if (ret != 0)
+            {
+                fprintf(
+                    stderr,
+                    "[SERVER] Failed to queue return QUIC datagram: %d\n",
+                    ret
+                );
+
+                return ret;
+            }
+
+
+            printf(
+                "[SERVER] TUN -> QUIC: %zu bytes\n",
+                packet.length
+            );
+
+
+            fflush(stdout);
+        }
+    }
+
+
+    return 0;
+}
+
+
+/* =========================================================
+ * Start server
  * ========================================================= */
 
 int start_picoquic_server(
@@ -618,13 +565,80 @@ int start_picoquic_server(
     const char* cert_file,
     const char* key_file)
 {
+    int ret = 0;
+
+
+    server_ctx_t ctx;
+
+
+    memset(
+        &ctx,
+        0,
+        sizeof(ctx)
+    );
+
+
+    ctx.tun_fd =
+        -1;
+
+
+    pthread_mutex_init(
+        &ctx.mutex,
+        NULL
+    );
+
+
+    atomic_init(
+        &ctx.connected,
+        0
+    );
+
+
+    /* =====================================================
+     * Create server TUN
+     * ===================================================== */
+
+    int tun_fd =
+        tun_create("tun0");
+
+
+    if (tun_fd < 0)
+    {
+        pthread_mutex_destroy(
+            &ctx.mutex
+        );
+
+        return -1;
+    }
+
+
+    ctx.tun_fd =
+        tun_fd;
+
+
+    if (tun_configure(
+            "tun0") != 0)
+    {
+        close(
+            tun_fd
+        );
+
+
+        pthread_mutex_destroy(
+            &ctx.mutex
+        );
+
+
+        return -1;
+    }
+
+
+    /* =====================================================
+     * Create QUIC context
+     * ===================================================== */
+
     uint64_t current_time =
         picoquic_current_time();
-
-
-    printf(
-        "[SERVER] Creating QUIC context...\n"
-    );
 
 
     picoquic_quic_t* quic =
@@ -635,7 +649,7 @@ int start_picoquic_server(
             NULL,
             "seamlessnet",
             server_callback,
-            NULL,
+            &ctx,
             NULL,
             NULL,
             NULL,
@@ -655,14 +669,22 @@ int start_picoquic_server(
         );
 
 
+        close(
+            tun_fd
+        );
+
+
+        pthread_mutex_destroy(
+            &ctx.mutex
+        );
+
+
         return -1;
     }
 
 
     /* =====================================================
-     * Stage 1 prototype idle timeout
-     *
-     * Keep inactive tunnels alive for five minutes.
+     * Five-minute prototype idle timeout
      * ===================================================== */
 
     picoquic_set_default_idle_timeout(
@@ -672,7 +694,7 @@ int start_picoquic_server(
 
 
     /* =====================================================
-     * Enable QUIC DATAGRAM support
+     * Enable QUIC DATAGRAM
      * ===================================================== */
 
     picoquic_tp_t tp =
@@ -692,40 +714,174 @@ int start_picoquic_server(
 
 
     /* =====================================================
-     * Start server
+     * Start QUIC network thread
+     *
+     * Unlike our previous server, the packet loop must now
+     * run in the background because the main thread needs
+     * to read return packets from tun0.
+     *
+     * Picoquic explicitly supports this threaded pattern:
+     * applications can wake the network thread and safely
+     * call Picoquic APIs from the wake-up callback.
      * ===================================================== */
 
+    picoquic_packet_loop_param_t param =
+        {0};
+
+
+    param.local_port =
+        (uint16_t)port;
+
+
+    param.local_af =
+        AF_INET;
+
+
     printf(
-        "[SERVER] Listening on UDP port %d...\n",
+        "[SERVER] Starting QUIC listener on UDP %d...\n",
         port
     );
 
 
-    printf(
-        "[SERVER] Idle timeout: %d seconds\n",
-        SEAMLESSNET_IDLE_TIMEOUT_MS / 1000
-    );
-
-
-    fflush(stdout);
-
-
-    int ret =
-        picoquic_packet_loop(
+    picoquic_network_thread_ctx_t* network_thread =
+        picoquic_start_network_thread(
             quic,
-            port,
-            AF_INET,
-            0,
-            0,
-            0,
-            NULL,
-            NULL
+            &param,
+            server_loop_callback,
+            &ctx,
+            &ret
         );
 
 
+    if (network_thread == NULL)
+    {
+        fprintf(
+            stderr,
+            "[SERVER] Failed to start network thread: %d\n",
+            ret
+        );
+
+
+        picoquic_free(
+            quic
+        );
+
+
+        close(
+            tun_fd
+        );
+
+
+        pthread_mutex_destroy(
+            &ctx.mutex
+        );
+
+
+        return -1;
+    }
+
+
+    printf("\n");
+    printf("=====================================\n");
+    printf("    SeamlessNet Forwarding Server\n");
+    printf("=====================================\n");
+    printf("QUIC UDP port: %d\n", port);
+    printf("TUN:           tun0\n");
+    printf("TUN IP:        10.10.0.2/24\n");
+    printf("Transport:     QUIC DATAGRAM\n");
+    printf("=====================================\n");
+    printf("\n");
+
+
     printf(
-        "[SERVER] Packet loop stopped: %d\n",
-        ret
+        "[SERVER] Waiting for client connection...\n"
+    );
+
+
+    /* =====================================================
+     * Read return packets from Linux
+     *
+     * Internet
+     *    |
+     *   eth0
+     *    |
+     * Linux routing / reverse NAT
+     *    |
+     *   tun0
+     *    |
+     * read()
+     *    |
+     * SeamlessNet
+     * ===================================================== */
+
+    uint8_t packet[
+        PACKET_MAX
+    ];
+
+
+    while (1)
+    {
+        ssize_t length =
+            read(
+                tun_fd,
+                packet,
+                sizeof(packet)
+            );
+
+
+        if (length < 0)
+        {
+            perror(
+                "[SERVER TUN] read"
+            );
+
+            break;
+        }
+
+
+        printf(
+            "[SERVER TUN] Captured return packet: %zd bytes\n",
+            length
+        );
+
+
+        print_ipv4_packet(
+            packet,
+            (size_t)length,
+            "INTERNET -> CLIENT"
+        );
+
+
+        if (!atomic_load(
+                &ctx.connected))
+        {
+            fprintf(
+                stderr,
+                "[SERVER] No connected client - dropping return packet\n"
+            );
+
+            continue;
+        }
+
+
+        if (queue_packet(
+                &ctx,
+                packet,
+                (size_t)length) == 0)
+        {
+            picoquic_wake_up_network_thread(
+                network_thread
+            );
+        }
+    }
+
+
+    /* =====================================================
+     * Cleanup
+     * ===================================================== */
+
+    picoquic_delete_network_thread(
+        network_thread
     );
 
 
@@ -734,5 +890,15 @@ int start_picoquic_server(
     );
 
 
-    return ret;
+    close(
+        tun_fd
+    );
+
+
+    pthread_mutex_destroy(
+        &ctx.mutex
+    );
+
+
+    return 0;
 }
