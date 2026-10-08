@@ -8,8 +8,10 @@ RUN apt-get update && apt-get install -y \
     cmake \
     make \
     pkg-config \
+    build-essential \
     libssl-dev \
     openssl \
+    ca-certificates \
     iproute2 \
     iputils-ping \
     iptables \

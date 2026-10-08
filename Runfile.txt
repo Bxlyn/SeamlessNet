@@ -1,9 +1,0 @@
-Local:
-
-Server: docker run --rm -it --name seamlessnet-server --network seamlessnet-net --ip 172.20.0.10 -v "${PWD}:/usr/local/SeamlessNet" seamlessnet
-Client: docker run --rm -it --name seamlessnet-client --network seamlessnet-net --ip 172.20.0.20 -v "${PWD}:/usr/local/SeamlessNet" seamlessnet
-
-Docker:
-
-Server: ./build/seamlessnet-server
-Client: ./build/seamlessnet-client

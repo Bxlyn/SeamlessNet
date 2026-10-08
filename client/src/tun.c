@@ -14,7 +14,6 @@
 #include <linux/if.h>
 #include <linux/if_tun.h>
 
-
 int tun_create(const char* device_name)
 {
     struct ifreq ifr;
@@ -59,7 +58,6 @@ int tun_create(const char* device_name)
 
     return fd;
 }
-
 
 int tun_configure(const char* device_name)
 {
@@ -107,6 +105,9 @@ int tun_configure(const char* device_name)
         return -1;
     }
 
+    /*
+     * Bring the interface online.
+     */
     snprintf(
         command,
         sizeof(command),
