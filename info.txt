@@ -1,0 +1,55 @@
+Run: docker compose up -d
+Close: docker compose down
+
+//Testing
+Change Direct Route: docker compose exec client ip route del 172.20.0.30/32 
+Change Tunnel Route: docker compose exec client ip route replace 172.20.0.30/32 dev tun0 advmss 90
+
+1MiB Download: docker compose exec client curl --noproxy "*" --http1.1 --max-time 120 -o /dev/null -w "HTTP: %{http_code} | Bytes: %{size_download} | Time: %{time_total}s\n" http://172.20.0.30:8080/test-1mb.bin
+60 KiB Downlaod: docker compose exec client curl --noproxy "*" --http1.1 --max-time 60 -o /dev/null -w "HTTP: %{http_code} | Bytes: %{size_download} | Time: %{time_total}s\n" http://172.20.0.30:8080/test.bin
+
+*Speed is affected by the number of prints in every generated packet*
+
+//TCP Upload//
+Configuration	        Typical throughput
+Direct Docker bridge	5–20 Gbit/s (host dependent)
+WireGuard	            1–10 Gbit/s
+OpenVPN	                100–800 Mbit/s
+This prototype	        272 Mbit/s
+
+This prototype introduces new work in the forward and return paths like tunneling, encryption,
+encapsulation, etc. This therefore slightly increases overhead and decreases throughput:
+//
+direct http > tunnel http
+direct TCP iperf3 > tunnel TCP iperf3
+//
+
+The tunnel introduces processing overhead for high-throughput TCP transfers 
+but still provides stable transport for UDP at the tested rates from 500K 
+upto 50M (with negligible loss of 0.02%). At 100M throughput decreased to 
+88.2 with 1.8% indicating that it had reached its processing capacity
+
+//Tested Rates for UDP
+500K
+1M
+2M
+5M
+10M
+25M
+50M
+100M
+
+//verdict
+While the tunnel has significantly lower throughput for TCP/UDP (with a 100M capacity),
+unlike its direct counterpart; it prioritizes session continuity and seamless migration,
+so some throughput overhead is an acceptable trade-off, provided the tunnel remains stable 
+and reliable. 
+
+In addition the current overhead is expected in a prototype implementation and could be 
+optimized in the future.
+
+Improvements for efficiency:
+- Increase the TUN MTU (e.g. to 1400 instead of 1000).
+- Remove or reduce printf() calls inside packet-processing paths.
+- Minimize unnecessary packet copies.
+- Avoid mutex contention where possible.

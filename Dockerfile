@@ -3,19 +3,20 @@ FROM gcc:latest
 USER root
 
 # Install dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
     git \
     cmake \
     make \
     pkg-config \
-    build-essential \
     libssl-dev \
     openssl \
-    ca-certificates \
     iproute2 \
     iputils-ping \
     iptables \
+    iperf3 \
     curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------

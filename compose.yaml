@@ -1,4 +1,3 @@
-
 services:
 
   server:
@@ -45,9 +44,12 @@ services:
       - sh
       - -c
       - |
+        set -e
+        apk add --no-cache iperf3
         mkdir -p /srv
         printf 'SeamlessNet-HTTP-OK\n' > /srv/index.html
         dd if=/dev/zero of=/srv/test.bin bs=1024 count=64 2>/dev/null
+        iperf3 -s -D -p 5201
         exec python -m http.server 8080 --bind 0.0.0.0 --directory /srv
 
     networks:
