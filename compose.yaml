@@ -1,35 +1,24 @@
 services:
-
   server:
     build: .
     image: seamlessnet:dev
     container_name: seamlessnet-server
-
     user: "0:0"
     init: true
-
-    entrypoint:
-      - /bin/sh
-      - /usr/local/SeamlessNet/scripts/start-server.sh
-
+    entrypoint: ["/bin/sh", "/usr/local/SeamlessNet/scripts/start-server.sh"]
     volumes:
       - .:/usr/local/SeamlessNet
-
     cap_add:
       - NET_ADMIN
-
     devices:
       - /dev/net/tun:/dev/net/tun
-
     sysctls:
       net.ipv4.ip_forward: "1"
-
     networks:
       seamlessnet-net:
         ipv4_address: 172.20.0.10
       seamlessnet-b:
         ipv4_address: 172.21.0.10
-
     healthcheck:
       test: ["CMD-SHELL", "ss -lun | grep -q ':4433'"]
       interval: 2s
@@ -37,11 +26,9 @@ services:
       retries: 30
       start_period: 10s
 
-
   web:
     image: python:3.12-alpine
     container_name: seamlessnet-web
-
     command:
       - sh
       - -c
@@ -53,44 +40,33 @@ services:
         dd if=/dev/zero of=/srv/test.bin bs=1024 count=64 2>/dev/null
         iperf3 -s -D -p 5201
         exec python -m http.server 8080 --bind 0.0.0.0 --directory /srv
-
     networks:
       seamlessnet-net:
         ipv4_address: 172.20.0.30
 
-
   client:
+    build: .
     image: seamlessnet:dev
     container_name: seamlessnet-client
-
     user: "0:0"
     init: true
-
-    entrypoint:
-      - /bin/sh
-      - /usr/local/SeamlessNet/scripts/start-client.sh
-
+    entrypoint: ["/bin/sh", "/usr/local/SeamlessNet/scripts/start-client.sh"]
     volumes:
       - .:/usr/local/SeamlessNet
-
     cap_add:
       - NET_ADMIN
-
     devices:
       - /dev/net/tun:/dev/net/tun
-
     depends_on:
       server:
         condition: service_healthy
       web:
         condition: service_started
-
     networks:
       seamlessnet-net:
         ipv4_address: 172.20.0.20
       seamlessnet-b:
         ipv4_address: 172.21.0.20
-
 
 networks:
   seamlessnet-net:
@@ -99,7 +75,6 @@ networks:
     ipam:
       config:
         - subnet: 172.20.0.0/24
-
   seamlessnet-b:
     name: seamlessnet-b
     driver: bridge
