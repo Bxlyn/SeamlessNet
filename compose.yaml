@@ -27,6 +27,8 @@ services:
     networks:
       seamlessnet-net:
         ipv4_address: 172.20.0.10
+      seamlessnet-b:
+        ipv4_address: 172.21.0.10
 
     healthcheck:
       test: ["CMD-SHELL", "ss -lun | grep -q ':4433'"]
@@ -86,6 +88,8 @@ services:
     networks:
       seamlessnet-net:
         ipv4_address: 172.20.0.20
+      seamlessnet-b:
+        ipv4_address: 172.21.0.20
 
 
 networks:
@@ -95,3 +99,10 @@ networks:
     ipam:
       config:
         - subnet: 172.20.0.0/24
+
+  seamlessnet-b:
+    name: seamlessnet-b
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/24
