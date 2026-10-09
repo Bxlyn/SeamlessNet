@@ -5,6 +5,8 @@ services:
     container_name: seamlessnet-server
     user: "0:0"
     init: true
+    environment:
+      SEAMLESSNET_DEBUG_PACKETS: ${SEAMLESSNET_DEBUG_PACKETS:-0}
     entrypoint: ["/bin/sh", "/usr/local/SeamlessNet/scripts/start-server.sh"]
     volumes:
       - .:/usr/local/SeamlessNet
@@ -50,6 +52,10 @@ services:
     container_name: seamlessnet-client
     user: "0:0"
     init: true
+    environment:
+      SEAMLESSNET_DEBUG_PACKETS: ${SEAMLESSNET_DEBUG_PACKETS:-0}
+      SEAMLESSNET_HEARTBEAT_INTERVAL_MS: ${SEAMLESSNET_HEARTBEAT_INTERVAL_MS:-250}
+      SEAMLESSNET_FAILOVER_TIMEOUT_MS: ${SEAMLESSNET_FAILOVER_TIMEOUT_MS:-1500}
     entrypoint: ["/bin/sh", "/usr/local/SeamlessNet/scripts/start-client.sh"]
     volumes:
       - .:/usr/local/SeamlessNet

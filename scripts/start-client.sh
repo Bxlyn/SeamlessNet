@@ -5,7 +5,7 @@ mkdir -p build
 
 echo '[BUILD] Compiling client'
 gcc client/src/main.c client/src/client.c client/src/tun.c \
-    -Iclient/src -I/usr/local/picoquic/picoquic \
+    -std=gnu11 -Iclient/src -Icommon -I/usr/local/picoquic/picoquic \
     -Wl,--start-group \
     /usr/local/picoquic/libpicoquic-core.a \
     /usr/local/picoquic/libpicoquic-log.a \

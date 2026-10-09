@@ -1,9 +1,11 @@
 #include "picoquic.h"
 #include "picoquic_packet_loop.h"
 #include "tun.h"
+#include "seamlessnet_monitor.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
+#include <poll.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdint.h>
@@ -24,21 +26,31 @@ typedef struct {
     tunnel_packet_t packets[PACKET_QUEUE];
     unsigned head, tail, count;
     pthread_mutex_t mutex;
-    picoquic_cnx_t* cnx; /* Only used on Picoquic's network thread. */
+    picoquic_cnx_t* cnx; /* Picoquic network thread only. */
     atomic_int connected;
     int tun_fd;
+    int debug_packets;
+    sn_stats_t stats;
 } server_ctx_t;
+
+static void server_drop(server_ctx_t* ctx, const char* reason)
+{
+    uint64_t n = atomic_fetch_add(&ctx->stats.drops, 1) + 1;
+    if (n <= 3 || n % 1000 == 0)
+        sn_log("SERVER", "WARN", "drop=%" PRIu64 " reason=%s", n, reason);
+}
 
 static int queue_packet(server_ctx_t* ctx, const uint8_t* data, size_t length)
 {
-    if (length == 0 || length > PACKET_MAX) {
-        fprintf(stderr, "[SERVER] Invalid/oversized return packet: %zu bytes\n", length);
+    if (!length || length > PACKET_MAX) {
+        server_drop(ctx, "invalid/oversized return packet");
         return -1;
     }
     pthread_mutex_lock(&ctx->mutex);
     if (ctx->count == PACKET_QUEUE) {
         pthread_mutex_unlock(&ctx->mutex);
-        fprintf(stderr, "[SERVER] Return packet queue full\n");
+        atomic_fetch_add(&ctx->stats.queue_full, 1);
+        server_drop(ctx, "return queue full");
         return -1;
     }
     tunnel_packet_t* p = &ctx->packets[ctx->tail];
@@ -46,6 +58,7 @@ static int queue_packet(server_ctx_t* ctx, const uint8_t* data, size_t length)
     p->length = length;
     ctx->tail = (ctx->tail + 1) % PACKET_QUEUE;
     ctx->count++;
+    sn_stats_peak(&ctx->stats, ctx->count);
     pthread_mutex_unlock(&ctx->mutex);
     return 0;
 }
@@ -53,7 +66,7 @@ static int queue_packet(server_ctx_t* ctx, const uint8_t* data, size_t length)
 static int dequeue_packet(server_ctx_t* ctx, tunnel_packet_t* output)
 {
     pthread_mutex_lock(&ctx->mutex);
-    if (ctx->count == 0) {
+    if (!ctx->count) {
         pthread_mutex_unlock(&ctx->mutex);
         return 0;
     }
@@ -64,37 +77,43 @@ static int dequeue_packet(server_ctx_t* ctx, tunnel_packet_t* output)
     return 1;
 }
 
-static void print_ipv4_packet(const uint8_t* bytes, size_t length, const char* direction)
+static unsigned queue_occupancy(server_ctx_t* ctx)
 {
-    if (length < 20 || (bytes[0] >> 4) != 4) return;
+    pthread_mutex_lock(&ctx->mutex);
+    unsigned n = ctx->count;
+    pthread_mutex_unlock(&ctx->mutex);
+    return n;
+}
+
+static void debug_ipv4(server_ctx_t* ctx, const uint8_t* bytes,
+                       size_t length, const char* direction)
+{
+    if (!ctx->debug_packets || length < 20 || (bytes[0] >> 4) != 4) return;
     char src[INET_ADDRSTRLEN], dst[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, bytes + 12, src, sizeof(src));
     inet_ntop(AF_INET, bytes + 16, dst, sizeof(dst));
-    printf("[SERVER] %s: %s -> %s, %zu bytes, protocol=%u\n",
-           direction, src, dst, length, bytes[9]);
+    sn_log("SERVER", "DEBUG", "%s %s -> %s %zuB proto=%u",
+           direction, src, dst, length, (unsigned)bytes[9]);
 }
 
 static void log_server_path(picoquic_cnx_t* cnx, uint64_t path_id, const char* event)
 {
     struct sockaddr_storage local = {0}, peer = {0};
-    char local_ip[INET_ADDRSTRLEN] = "?", peer_ip[INET_ADDRSTRLEN] = "?";
+    char lip[INET_ADDRSTRLEN] = "?", pip[INET_ADDRSTRLEN] = "?";
     int a = picoquic_get_path_addr(cnx, path_id, 1, &local);
     int b = picoquic_get_path_addr(cnx, path_id, 2, &peer);
     if (a == 0 && b == 0 && local.ss_family == AF_INET && peer.ss_family == AF_INET) {
-        const struct sockaddr_in* sa = (const struct sockaddr_in*)&local;
-        const struct sockaddr_in* sb = (const struct sockaddr_in*)&peer;
-        inet_ntop(AF_INET, &sa->sin_addr, local_ip, sizeof(local_ip));
-        inet_ntop(AF_INET, &sb->sin_addr, peer_ip, sizeof(peer_ip));
-        printf("[SERVER] Path %s id=%llu local=%s:%u peer=%s:%u\n",
-               event, (unsigned long long)path_id,
-               local_ip, (unsigned)ntohs(sa->sin_port),
-               peer_ip, (unsigned)ntohs(sb->sin_port));
+        const struct sockaddr_in* la = (const struct sockaddr_in*)&local;
+        const struct sockaddr_in* pa = (const struct sockaddr_in*)&peer;
+        inet_ntop(AF_INET, &la->sin_addr, lip, sizeof(lip));
+        inet_ntop(AF_INET, &pa->sin_addr, pip, sizeof(pip));
+        sn_log("SERVER", "PATH", "%s id=%" PRIu64 " local=%s:%u peer=%s:%u start=%" PRIu64,
+               event, path_id, lip, (unsigned)ntohs(la->sin_port),
+               pip, (unsigned)ntohs(pa->sin_port),
+               (uint64_t)picoquic_get_cnx_start_time(cnx));
     } else {
-        printf("[SERVER] Path %s id=%llu\n", event, (unsigned long long)path_id);
+        sn_log("SERVER", "PATH", "%s id=%" PRIu64, event, path_id);
     }
-    printf("[SERVER] Same connection start time=%llu\n",
-           (unsigned long long)picoquic_get_cnx_start_time(cnx));
-    fflush(stdout);
 }
 
 static int server_callback(picoquic_cnx_t* cnx, uint64_t stream_id,
@@ -104,47 +123,63 @@ static int server_callback(picoquic_cnx_t* cnx, uint64_t stream_id,
 {
     (void)stream_ctx;
     server_ctx_t* ctx = (server_ctx_t*)callback_ctx;
-    if (ctx == NULL) return -1;
-
+    if (!ctx) return -1;
     switch (event) {
     case picoquic_callback_ready:
-        if (ctx->cnx != NULL && ctx->cnx != cnx && atomic_load(&ctx->connected)) {
-            fprintf(stderr, "[SERVER] Stage 1 only supports one active client\n");
+        if (ctx->cnx && ctx->cnx != cnx && atomic_load(&ctx->connected)) {
+            sn_log("SERVER", "ERROR", "Stage 1 supports only one active QUIC client");
             return -1;
         }
         ctx->cnx = cnx;
         atomic_store(&ctx->connected, 1);
         picoquic_enable_path_callbacks(cnx, 1);
-        printf("[SERVER] QUIC connected; start time=%llu\n",
-               (unsigned long long)picoquic_get_cnx_start_time(cnx));
-        fflush(stdout);
+        sn_log("SERVER", "CONNECTION", "QUIC ready start=%" PRIu64,
+               (uint64_t)picoquic_get_cnx_start_time(cnx));
         break;
 
     case picoquic_callback_datagram: {
+        uint8_t type;
+        uint64_t seq;
+        if (sn_hb_parse(bytes, length, &type, &seq)) {
+            if (type == SN_HB_PING) {
+                atomic_fetch_add(&ctx->stats.hb_rx, 1);
+                uint8_t ack[SN_HB_SIZE];
+                sn_hb_make(ack, SN_HB_ACK, seq);
+                int ret = picoquic_queue_datagram_frame(cnx, sizeof(ack), ack);
+                if (!ret) {
+                    atomic_fetch_add(&ctx->stats.hb_tx, 1);
+                    if (ctx->debug_packets)
+                        sn_log("SERVER", "DEBUG", "heartbeat ACK seq=%" PRIu64, seq);
+                } else {
+                    atomic_fetch_add(&ctx->stats.queue_errors, 1);
+                    server_drop(ctx, "heartbeat ACK queue failed");
+                }
+            }
+            break; /* Heartbeats never enter tun0. */
+        }
         if (length < 20 || length > PACKET_MAX || (bytes[0] >> 4) != 4) {
-            fprintf(stderr, "[SERVER] Invalid incoming IP packet: %zu bytes\n", length);
+            server_drop(ctx, "invalid QUIC payload");
             break;
         }
-        print_ipv4_packet(bytes, length, "QUIC -> TUN");
+        atomic_fetch_add(&ctx->stats.quic_rx_pkts, 1);
+        atomic_fetch_add(&ctx->stats.quic_rx_bytes, length);
+        debug_ipv4(ctx, bytes, length, "QUIC -> TUN");
         ssize_t n = write(ctx->tun_fd, bytes, length);
-        if (n < 0) perror("[SERVER] write(tun0)");
-        else if ((size_t)n != length)
-            fprintf(stderr, "[SERVER] Short TUN write: %zd/%zu\n", n, length);
-        fflush(stdout);
+        if (n < 0 || (size_t)n != length) {
+            server_drop(ctx, "TUN write failed");
+            if (n < 0) sn_log("SERVER", "ERROR", "write(tun0): %s", strerror(errno));
+        } else {
+            atomic_fetch_add(&ctx->stats.tun_out_pkts, 1);
+            atomic_fetch_add(&ctx->stats.tun_out_bytes, length);
+        }
         break;
     }
-
     case picoquic_callback_path_available:
-        log_server_path(cnx, stream_id, "AVAILABLE");
-        break;
+        log_server_path(cnx, stream_id, "AVAILABLE"); break;
     case picoquic_callback_path_suspended:
-        log_server_path(cnx, stream_id, "SUSPENDED");
-        break;
+        log_server_path(cnx, stream_id, "SUSPENDED"); break;
     case picoquic_callback_path_deleted:
-        printf("[SERVER] Path deleted id=%llu\n", (unsigned long long)stream_id);
-        fflush(stdout);
-        break;
-
+        sn_log("SERVER", "PATH", "DELETED id=%" PRIu64, stream_id); break;
     case picoquic_callback_close:
     case picoquic_callback_application_close:
     case picoquic_callback_stateless_reset:
@@ -152,36 +187,34 @@ static int server_callback(picoquic_cnx_t* cnx, uint64_t stream_id,
             atomic_store(&ctx->connected, 0);
             ctx->cnx = NULL;
         }
-        printf("[SERVER] QUIC connection closed (event=%d)\n", (int)event);
-        fflush(stdout);
+        sn_log("SERVER", "CONNECTION", "closed event=%d", (int)event);
         break;
-    default:
-        break;
+    default: break;
     }
     return 0;
 }
 
 static int server_loop_callback(picoquic_quic_t* quic,
-                                picoquic_packet_loop_cb_enum cb_mode,
+                                picoquic_packet_loop_cb_enum mode,
                                 void* callback_ctx, void* callback_arg)
 {
-    (void)quic;
-    (void)callback_arg;
+    (void)quic; (void)callback_arg;
     server_ctx_t* ctx = (server_ctx_t*)callback_ctx;
-    if (ctx == NULL) return -1;
-    if (cb_mode != picoquic_packet_loop_wake_up ||
-        !atomic_load(&ctx->connected) || ctx->cnx == NULL) return 0;
+    if (!ctx || mode != picoquic_packet_loop_wake_up ||
+        !atomic_load(&ctx->connected) || !ctx->cnx) return 0;
 
-    tunnel_packet_t packet;
-    while (dequeue_packet(ctx, &packet)) {
-        int ret = picoquic_queue_datagram_frame(ctx->cnx, packet.length, packet.data);
-        if (ret != 0) {
-            fprintf(stderr, "[SERVER] Return QUIC DATAGRAM queue error: %d\n", ret);
+    tunnel_packet_t p;
+    while (dequeue_packet(ctx, &p)) {
+        int ret = picoquic_queue_datagram_frame(ctx->cnx, p.length, p.data);
+        if (ret) {
+            atomic_fetch_add(&ctx->stats.queue_errors, 1);
+            server_drop(ctx, "return DATAGRAM queue failed");
             continue;
         }
-        print_ipv4_packet(packet.data, packet.length, "TUN -> QUIC");
+        atomic_fetch_add(&ctx->stats.quic_tx_pkts, 1);
+        atomic_fetch_add(&ctx->stats.quic_tx_bytes, p.length);
+        debug_ipv4(ctx, p.data, p.length, "TUN -> QUIC");
     }
-    fflush(stdout);
     return 0;
 }
 
@@ -190,7 +223,9 @@ int start_picoquic_server(int port, const char* cert_file, const char* key_file)
     int ret = -1;
     server_ctx_t ctx = {0};
     ctx.tun_fd = -1;
+    ctx.debug_packets = sn_env_flag("SEAMLESSNET_DEBUG_PACKETS");
     pthread_mutex_init(&ctx.mutex, NULL);
+    sn_stats_init(&ctx.stats);
     atomic_init(&ctx.connected, 0);
 
     ctx.tun_fd = tun_create("tun0");
@@ -200,8 +235,8 @@ int start_picoquic_server(int port, const char* cert_file, const char* key_file)
     picoquic_quic_t* quic = picoquic_create(
         8, cert_file, key_file, NULL, "seamlessnet", server_callback, &ctx,
         NULL, NULL, NULL, picoquic_current_time(), NULL, NULL, NULL, 0);
-    if (quic == NULL) {
-        fprintf(stderr, "[SERVER] picoquic_create failed\n");
+    if (!quic) {
+        sn_log("SERVER", "ERROR", "picoquic_create failed");
         goto cleanup_tun;
     }
     picoquic_set_default_idle_timeout(quic, SEAMLESSNET_IDLE_TIMEOUT_MS);
@@ -215,24 +250,45 @@ int start_picoquic_server(int port, const char* cert_file, const char* key_file)
     param.local_af = AF_INET;
     picoquic_network_thread_ctx_t* thread = picoquic_start_network_thread(
         quic, &param, server_loop_callback, &ctx, &ret);
-    if (thread == NULL) {
-        fprintf(stderr, "[SERVER] Picoquic network thread failed: %d\n", ret);
+    if (!thread) {
+        sn_log("SERVER", "ERROR", "network thread failed: %d", ret);
         goto cleanup_quic;
     }
-
-    printf("[SERVER] Listening UDP %d on both Network A and Network B\n", port);
-    printf("[SERVER] TUN 10.10.0.2/24; one client; no automatic reconnect\n");
-    fflush(stdout);
+    sn_log("SERVER", "CONNECTION", "listening UDP %d on Networks A and B", port);
+    sn_log("SERVER", "CONFIG", "TUN MTU=1000 debug_packets=%d", ctx.debug_packets);
 
     uint8_t packet[PACKET_MAX];
+    sn_stats_snapshot_t previous = {.last_report_ms = sn_monotonic_ms()};
     for (;;) {
+        uint64_t tick = sn_monotonic_ms();
+        if (tick - previous.last_report_ms >= 1000)
+            sn_stats_report("SERVER", &ctx.stats, &previous,
+                            queue_occupancy(&ctx), PACKET_QUEUE, 0);
+
+        struct pollfd pfd = {.fd = ctx.tun_fd, .events = POLLIN};
+        int ready = poll(&pfd, 1, 100);
+        if (ready == 0) continue;
+        if (ready < 0) {
+            if (errno == EINTR) continue;
+            sn_log("SERVER", "ERROR", "poll(tun0): %s", strerror(errno));
+            break;
+        }
+        if (!(pfd.revents & POLLIN)) {
+            sn_log("SERVER", "ERROR", "unexpected TUN poll event: 0x%x", pfd.revents);
+            break;
+        }
         ssize_t n = read(ctx.tun_fd, packet, sizeof(packet));
         if (n < 0) {
             if (errno == EINTR) continue;
-            perror("[SERVER] read(tun0)");
+            sn_log("SERVER", "ERROR", "read(tun0): %s", strerror(errno));
             break;
         }
-        if (!atomic_load(&ctx.connected)) continue;
+        atomic_fetch_add(&ctx.stats.tun_in_pkts, 1);
+        atomic_fetch_add(&ctx.stats.tun_in_bytes, (size_t)n);
+        if (!atomic_load(&ctx.connected)) {
+            server_drop(&ctx, "no active QUIC client");
+            continue;
+        }
         if (queue_packet(&ctx, packet, (size_t)n) == 0)
             picoquic_wake_up_network_thread(thread);
     }

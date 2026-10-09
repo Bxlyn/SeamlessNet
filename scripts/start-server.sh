@@ -14,7 +14,7 @@ chmod 600 certs/key.pem
 
 echo '[BUILD] Compiling server'
 gcc server/src/main.c server/src/server.c server/src/tun.c \
-    -Iserver/src -I/usr/local/picoquic/picoquic \
+    -std=gnu11 -Iserver/src -Icommon -I/usr/local/picoquic/picoquic \
     -Wl,--start-group \
     /usr/local/picoquic/libpicoquic-core.a \
     /usr/local/picoquic/libpicoquic-log.a \
