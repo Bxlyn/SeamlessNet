@@ -29,7 +29,7 @@ docker compose exec client ip -br addr
 docker compose exec client ip route get 172.20.0.30
 ```
 
-![Containers, two network interfaces, and the TUN route](images/01-startup.png)
+![Containers, two network interfaces, and the TUN route](images/startup.png)
 
 **Screenshot 01 — Startup.** The client, server, and web containers are running. The client has Network A (`172.20.0.20`) and Network B (`172.21.0.20`), and traffic for `172.20.0.30` is routed via `tun0` with source `10.10.0.1`. Linux interface names can change between runs, so identify networks by IP address.
 
@@ -42,7 +42,7 @@ docker compose exec client curl --noproxy '*' --max-time 15 http://172.20.0.30:8
 docker compose exec client ping -i 0.2 172.20.0.30
 ```
 
-![HTTP response and continuous ping before failure](images/02-before-failure.png)
+![HTTP response and continuous ping before failure](images/before-failure.png)
 
 **Screenshot 02 — Before failure.** The HTTP server returns `SeamlessNet-HTTP-OK`, and ICMP replies arrive over the tunnel. The ping command intentionally has **no `-c` limit**: it runs continuously at one request every 200 ms until stopped with **Ctrl+C**. Keep it running while performing Steps 3–5.
 
@@ -54,7 +54,7 @@ In Terminal 2, while Terminal 1 continues pinging:
 docker compose logs -f client server | Select-String 'STATS|HEALTH|FAILOVER|MIGRATION|PATH|RECOVERY|ERROR'
 ```
 
-![Live one-second statistics and migration events](images/03-monitoring.png)
+![Live one-second statistics and migration events](images/monitoring.png)
 
 **Screenshot 03 — Monitoring.** `-f` means **follow**: new log lines appear live until you stop the command with Ctrl+C. SeamlessNet reports packet counts, bytes, queue occupancy, drops, and heartbeat activity every second. Per-packet debug logs are off.
 
@@ -70,7 +70,7 @@ docker compose exec client sh scripts/blackhole-a.sh status
 docker compose exec client ip -br addr
 ```
 
-![Network A blackhole enabled](images/04-silent-failure.png)
+![Network A blackhole enabled](images/silent-failure.png)
 
 **Screenshot 04 — Silent failure.** The updated screenshot confirms that `Network A blackhole: ON` while **both external interfaces remain UP**: `eth0` has Network A (`172.20.0.20/24`) and `eth1` has Network B (`172.21.0.20/24`). The virtual tunnel `tun0` remains present at `10.10.0.1/24`. This demonstrates a **silent failure**: Network A's outgoing QUIC traffic is blocked even though Linux still reports the interface as operational.
 
@@ -86,7 +86,7 @@ Terminal 2 already follows events using `-f`. You can also retrieve the relevant
 docker compose logs --since=2m client server | Select-String 'HEALTH|FAILOVER|MIGRATION|PATH|RECOVERY|ERROR'
 ```
 
-![Automatic degradation detection, migration, and recovery](images/05-migration-events.png)
+![Automatic degradation detection, migration, and recovery](images/migration-events.png)
 
 **Screenshot 05 — Migration events (ICMP run).** The logs show the following events:
 
@@ -106,7 +106,7 @@ The client and server both report Network B addresses (`172.21.0.20` and `172.21
 
 Keep the **same ping process** running after migration. In this recorded run, it continued for more than seven minutes in total before being stopped manually with Ctrl+C.
 
-![Final long-running ping statistics](images/06-ping-results.png)
+![Final long-running ping statistics](images/ping-results.png)
 
 **Screenshot 06 — ICMP result.** The final terminal summary shows:
 
@@ -144,7 +144,7 @@ docker compose exec client sh scripts/blackhole-a.sh on
 
 **Do not stop iperf3.** Let it complete normally.
 
-![Completed 40-second iperf3 sender and receiver results](images/07-tcp-results.png)
+![Completed 40-second iperf3 sender and receiver results](images/tcp-results.png)
 
 **Screenshot 07 — TCP results.** This separate run finished normally with:
 
@@ -165,7 +165,7 @@ The event log from the **TCP run** is separate from the ICMP run:
 docker compose logs -f client server | Select-String 'HEALTH|FAILOVER|MIGRATION|PATH|RECOVERY|ERROR'
 ```
 
-![Migration events from the separate TCP experiment](images/08-tcp-migration.png)
+![Migration events from the separate TCP experiment](images/tcp-migration.png)
 
 **Screenshot 08 — TCP migration.** The logs show Network A degradation at `22:35:12.144Z`, a probe to Network B, path availability at `22:35:12.155Z`, and the first application IP reply at `22:35:12.808Z`.
 
