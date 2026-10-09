@@ -95,6 +95,30 @@ static inline int sn_silent_failure(uint64_t now_ms, uint64_t last_ack_ms,
            now_ms - last_rx_ms >= timeout_ms;
 }
 
+/* Return values distinguish early degradation from a hard timeout.
+ * A health warning needs both ACK and application traffic to be stale. */
+enum { SN_HEALTH_OK = 0, SN_HEALTH_EARLY_WARNING = 1,
+       SN_HEALTH_HARD_FAILURE = 2 };
+
+static inline int sn_path_health_level(uint64_t now_ms, uint64_t last_ack_ms,
+                                        uint64_t last_rx_ms, uint64_t heartbeat_tx,
+                                        uint64_t early_warning_ms, uint64_t hard_timeout_ms)
+{
+    if (sn_silent_failure(now_ms, last_ack_ms, last_rx_ms,
+                          heartbeat_tx, hard_timeout_ms))
+        return SN_HEALTH_HARD_FAILURE;
+    if (sn_silent_failure(now_ms, last_ack_ms, last_rx_ms,
+                          heartbeat_tx, early_warning_ms))
+        return SN_HEALTH_EARLY_WARNING;
+    return SN_HEALTH_OK;
+}
+
+/* A zero timestamp means unknown; never report a fake duration. */
+static inline uint64_t sn_elapsed_ms(uint64_t end_ms, uint64_t start_ms)
+{
+    return start_ms && end_ms >= start_ms ? end_ms - start_ms : 0;
+}
+
 typedef struct {
     atomic_uint_fast64_t tun_in_pkts, tun_in_bytes;
     atomic_uint_fast64_t tun_out_pkts, tun_out_bytes;

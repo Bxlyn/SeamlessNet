@@ -22,12 +22,13 @@
 #define NETWORK_A_CLIENT_IP "172.20.0.20"
 #define NETWORK_B_CLIENT_IP "172.21.0.20"
 #define NETWORK_B_SERVER_IP "172.21.0.10"
-#define HEALTH_CHECK_INTERVAL_MS 200
+#define HEALTH_CHECK_INTERVAL_MS 100
 #define MIGRATION_RETRY_MS 3000
 #define MAX_MIGRATION_ATTEMPTS 3
 
 enum { MIGRATION_MANUAL = 1, MIGRATION_LINK_DOWN = 2,
-       MIGRATION_HEARTBEAT_TIMEOUT = 3, MIGRATION_RETRY = 4 };
+       MIGRATION_HEARTBEAT_TIMEOUT = 3, MIGRATION_RETRY = 4,
+       MIGRATION_EARLY_WARNING = 5 };
 
 typedef struct {
     uint8_t data[PACKET_MAX];
@@ -44,6 +45,7 @@ typedef struct {
     int tun_fd;
     int debug_packets;
     unsigned heartbeat_interval_ms;
+    unsigned early_warning_ms;
     unsigned failover_timeout_ms;
 
     atomic_int connected;
@@ -51,6 +53,11 @@ typedef struct {
     atomic_int migrate_reason;
     atomic_int migration_validated;
     atomic_int heartbeat_send_requested;
+    atomic_int hard_timeout_reported;
+    atomic_int app_recovery_pending;
+    atomic_uint_fast64_t migration_requested_at_ms;
+    atomic_uint_fast64_t migration_validated_at_ms;
+    atomic_uint_fast64_t migration_last_good_ms;
     atomic_uint_fast64_t heartbeat_sequence;
     atomic_uint_fast64_t heartbeat_last_ack_sequence;
     atomic_uint_fast64_t heartbeat_last_ack_ms;
@@ -127,10 +134,22 @@ static void log_path(picoquic_cnx_t* cnx, uint64_t path_id,
                pip, (unsigned)ntohs(pa->sin_port));
         if (!strcmp(event, "AVAILABLE") &&
             !strcmp(lip, NETWORK_B_CLIENT_IP) && !strcmp(pip, NETWORK_B_SERVER_IP)) {
-            atomic_store(&ctx->migration_validated, 1);
-            atomic_store(&ctx->heartbeat_last_ack_ms, sn_monotonic_ms());
-            sn_log("CLIENT", "MIGRATION", "Network B validated; original QUIC connection start=%" PRIu64,
-                   (uint64_t)picoquic_get_cnx_start_time(cnx));
+            /* Path validation is not the same as application recovery. */
+            if (!atomic_exchange(&ctx->migration_validated, 1)) {
+                uint64_t validated_at = sn_monotonic_ms();
+                uint64_t requested_at = atomic_load(&ctx->migration_requested_at_ms);
+                uint64_t last_good_at = atomic_load(&ctx->migration_last_good_ms);
+                atomic_store(&ctx->migration_validated_at_ms, validated_at);
+                atomic_store(&ctx->app_recovery_pending, 1);
+                atomic_store(&ctx->heartbeat_last_ack_ms, validated_at);
+                sn_log("CLIENT", "MIGRATION",
+                       "Network B validated on ORIGINAL QUIC connection start=%" PRIu64
+                       " mono_ms=%" PRIu64 " probe_to_validated_ms=%" PRIu64
+                       " last_good_to_validated_ms=%" PRIu64,
+                       (uint64_t)picoquic_get_cnx_start_time(cnx), validated_at,
+                       sn_elapsed_ms(validated_at, requested_at),
+                       sn_elapsed_ms(validated_at, last_good_at));
+            }
         }
     } else {
         sn_log("CLIENT", "PATH", "%s id=%" PRIu64 " (addresses unavailable)", event, path_id);
@@ -190,6 +209,16 @@ static int client_callback(picoquic_cnx_t* cnx, uint64_t stream_id,
         } else {
             atomic_fetch_add(&ctx->stats.tun_out_pkts, 1);
             atomic_fetch_add(&ctx->stats.tun_out_bytes, length);
+            if (atomic_exchange(&ctx->app_recovery_pending, 0)) {
+                uint64_t app_at = sn_monotonic_ms();
+                sn_log("CLIENT", "RECOVERY",
+                       "first IP reply after Network B validation mono_ms=%" PRIu64
+                       " probe_to_app_reply_ms=%" PRIu64
+                       " validation_to_app_reply_ms=%" PRIu64,
+                       app_at,
+                       sn_elapsed_ms(app_at, atomic_load(&ctx->migration_requested_at_ms)),
+                       sn_elapsed_ms(app_at, atomic_load(&ctx->migration_validated_at_ms)));
+            }
             if (ctx->debug_packets) sn_log("CLIENT", "DEBUG", "QUIC -> TUN %zuB", length);
         }
         break;
@@ -316,10 +345,21 @@ static void request_migration(client_ctx_t* ctx,
                               picoquic_network_thread_ctx_t* thread,
                               int reason, unsigned attempt)
 {
+    uint64_t tick = sn_monotonic_ms();
+    uint64_t ack_at = atomic_load(&ctx->heartbeat_last_ack_ms);
+    uint64_t rx_at = atomic_load(&ctx->last_authenticated_rx_ms);
+    uint64_t last_good_at = ack_at > rx_at ? ack_at : rx_at;
+    /* Timestamp is updated on retries; the first attempt is what matters
+     * for the normal successful early-failover case. */
+    atomic_store(&ctx->migration_requested_at_ms, tick);
+    atomic_store(&ctx->migration_last_good_ms, last_good_at);
     atomic_store(&ctx->migrate_reason, reason);
     atomic_store(&ctx->migrate_requested, 1);
-    sn_log("CLIENT", "FAILOVER", "Network A -> B reason=%d attempt=%u/%u",
-           reason, attempt, MAX_MIGRATION_ATTEMPTS);
+    sn_log("CLIENT", "FAILOVER",
+           "Network A -> B reason=%d attempt=%u/%u mono_ms=%" PRIu64
+           " ack_age_ms=%" PRIu64 " app_rx_age_ms=%" PRIu64,
+           reason, attempt, MAX_MIGRATION_ATTEMPTS, tick,
+           sn_elapsed_ms(tick, ack_at), sn_elapsed_ms(tick, rx_at));
     picoquic_wake_up_network_thread(thread);
 }
 
@@ -331,9 +371,13 @@ int start_picoquic_client(const char* server_ip, int port)
     ctx.server_port = port;
     ctx.debug_packets = sn_env_flag("SEAMLESSNET_DEBUG_PACKETS");
     ctx.heartbeat_interval_ms = sn_env_u32("SEAMLESSNET_HEARTBEAT_INTERVAL_MS", 250, 100, 5000);
+    ctx.early_warning_ms = sn_env_u32("SEAMLESSNET_EARLY_WARNING_MS", 750, 300, 10000);
     ctx.failover_timeout_ms = sn_env_u32("SEAMLESSNET_FAILOVER_TIMEOUT_MS", 1500, 750, 30000);
-    if (ctx.failover_timeout_ms < ctx.heartbeat_interval_ms * 3u)
-        ctx.failover_timeout_ms = ctx.heartbeat_interval_ms * 3u;
+    /* Require at least two heartbeat opportunities before early warning. */
+    if (ctx.early_warning_ms < ctx.heartbeat_interval_ms * 2u)
+        ctx.early_warning_ms = ctx.heartbeat_interval_ms * 2u;
+    if (ctx.failover_timeout_ms < ctx.early_warning_ms + ctx.heartbeat_interval_ms)
+        ctx.failover_timeout_ms = ctx.early_warning_ms + ctx.heartbeat_interval_ms;
     pthread_mutex_init(&ctx.mutex, NULL);
     sn_stats_init(&ctx.stats);
     atomic_init(&ctx.connected, 0);
@@ -341,6 +385,11 @@ int start_picoquic_client(const char* server_ip, int port)
     atomic_init(&ctx.migrate_reason, 0);
     atomic_init(&ctx.migration_validated, 0);
     atomic_init(&ctx.heartbeat_send_requested, 0);
+    atomic_init(&ctx.hard_timeout_reported, 0);
+    atomic_init(&ctx.app_recovery_pending, 0);
+    atomic_init(&ctx.migration_requested_at_ms, 0);
+    atomic_init(&ctx.migration_validated_at_ms, 0);
+    atomic_init(&ctx.migration_last_good_ms, 0);
     atomic_init(&ctx.heartbeat_sequence, 0);
     atomic_init(&ctx.heartbeat_last_ack_sequence, 0);
     atomic_init(&ctx.heartbeat_last_ack_ms, 0);
@@ -406,8 +455,9 @@ int start_picoquic_client(const char* server_ip, int port)
         ret = -1;
         goto cleanup_thread;
     }
-    sn_log("CLIENT", "CONFIG", "TUN MTU=1000 heartbeat=%ums timeout=%ums debug_packets=%d",
-           ctx.heartbeat_interval_ms, ctx.failover_timeout_ms, ctx.debug_packets);
+    sn_log("CLIENT", "CONFIG", "TUN MTU=1000 heartbeat=%ums early_warning=%ums hard_timeout=%ums debug_packets=%d",
+           ctx.heartbeat_interval_ms, ctx.early_warning_ms,
+           ctx.failover_timeout_ms, ctx.debug_packets);
     sn_log("CLIENT", "CONFIG", "manual trigger: touch %s", MIGRATION_TRIGGER);
 
     uint8_t packet[PACKET_MAX];
@@ -444,20 +494,36 @@ int start_picoquic_client(const char* server_ip, int port)
                 uint64_t ack_age = ack_at && tick >= ack_at ? tick - ack_at : 0;
                 uint64_t rx_at = atomic_load(&ctx.last_authenticated_rx_ms);
                 uint64_t rx_age = rx_at && tick >= rx_at ? tick - rx_at : 0;
-                /* Recent authenticated application replies also prove path liveness.
-                 * This avoids a false failover when a heartbeat ACK alone is lost. */
-                int timeout = sn_silent_failure(tick, ack_at, rx_at,
-                                  atomic_load(&ctx.stats.hb_tx), ctx.failover_timeout_ms);
-                if (a_up == 0 || timeout || migration_attempts > 0) {
+                /* Silence is evaluated using both heartbeat ACKs and
+                 * authenticated application traffic, so one lost ACK does
+                 * not cause a premature switch. */
+                int health = sn_path_health_level(tick, ack_at, rx_at,
+                                 atomic_load(&ctx.stats.hb_tx),
+                                 ctx.early_warning_ms, ctx.failover_timeout_ms);
+                if (health == SN_HEALTH_HARD_FAILURE &&
+                    !atomic_exchange(&ctx.hard_timeout_reported, 1)) {
+                    sn_log("CLIENT", "HEALTH", "Network A hard timeout: ack_age=%" PRIu64
+                           "ms app_rx_age=%" PRIu64 "ms mono_ms=%" PRIu64,
+                           ack_age, rx_age, tick);
+                } else if (health == SN_HEALTH_OK) {
+                    atomic_store(&ctx.hard_timeout_reported, 0);
+                }
+                if (a_up == 0 || health != SN_HEALTH_OK || migration_attempts > 0) {
                     int b_up = interface_with_ipv4_is_up(NETWORK_B_CLIENT_IP);
                     if (b_up == 1) {
                         b_unavailable_reported = 0;
                         if (migration_attempts < MAX_MIGRATION_ATTEMPTS &&
                             (migration_attempts == 0 || tick - last_migration_attempt_ms >= MIGRATION_RETRY_MS)) {
                             int reason = migration_attempts ? MIGRATION_RETRY :
-                                         a_up == 0 ? MIGRATION_LINK_DOWN : MIGRATION_HEARTBEAT_TIMEOUT;
-                            if (reason == MIGRATION_HEARTBEAT_TIMEOUT)
-                                sn_log("CLIENT", "FAILOVER", "silent Network A failure: ACK age=%" PRIu64 "ms, app/control RX age=%" PRIu64 "ms", ack_age, rx_age);
+                                         a_up == 0 ? MIGRATION_LINK_DOWN :
+                                         health == SN_HEALTH_EARLY_WARNING ? MIGRATION_EARLY_WARNING :
+                                         MIGRATION_HEARTBEAT_TIMEOUT;
+                            if (reason == MIGRATION_EARLY_WARNING)
+                                sn_log("CLIENT", "HEALTH", "Network A DEGRADED: ack_age=%" PRIu64
+                                       "ms app_rx_age=%" PRIu64 "ms; switching before hard timeout", ack_age, rx_age);
+                            else if (reason == MIGRATION_HEARTBEAT_TIMEOUT)
+                                sn_log("CLIENT", "FAILOVER", "silent Network A failure: ACK age=%" PRIu64
+                                       "ms app/control RX age=%" PRIu64 "ms", ack_age, rx_age);
                             else if (reason == MIGRATION_LINK_DOWN)
                                 sn_log("CLIENT", "FAILOVER", "Network A interface DOWN");
                             migration_attempts++;
