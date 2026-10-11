@@ -542,7 +542,7 @@ int start_picoquic_client(const char* server_ip, int port)
             }
         }
 
-        if (tick - previous.last_report_ms >= 1000) {
+        if (tick - previous.last_report_ms >= 5000) {
             uint64_t ack = atomic_load(&ctx.heartbeat_last_ack_ms);
             uint64_t age = ack && tick >= ack ? tick - ack : 0;
             sn_stats_report("CLIENT", &ctx.stats, &previous,
