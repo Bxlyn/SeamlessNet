@@ -54,7 +54,7 @@ docker compose exec client curl --noproxy '*' --max-time 15 http://172.20.0.30:8
 
 Expected: `SeamlessNet-HTTP-OK`. Stop the environment with `docker compose down`.
 
-## Demo and results
+## Demo ex and results
 
 **[View the step-by-step demo, screenshots, and analysis](docs/DEMO.md)**
 
