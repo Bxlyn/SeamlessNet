@@ -70,6 +70,7 @@ Expected: `SeamlessNet-HTTP-OK`. Stop the environment with `docker compose down`
 
 These are results from local Docker experiments, not performance guarantees. Probe-to-reply time is **not** the full time since network failure. The TCP test also recorded **6,614 retransmissions**.
 
+**The demo and results above are used as an example for later testing**
 ## Prototype scope
 
 The TUN MTU is 1000 bytes. Both simulated networks are available at the same time, but **one QUIC path carries application traffic at a time**; this is not simultaneous multipath transport. Automatic failover currently goes from A to B, not back again.
