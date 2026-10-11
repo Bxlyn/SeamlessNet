@@ -1,0 +1,2 @@
+172.20.0.30 dev tun0 src 10.10.0.1 uid 0 
+    cache advmss 900 

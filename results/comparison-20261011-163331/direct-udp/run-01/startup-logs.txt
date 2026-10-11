@@ -1,0 +1,40 @@
+seamlessnet-client  |  SeamlessNet QUIC Client
+seamlessnet-client  | =============================
+seamlessnet-client  | [TUN] Created interface: tun0
+seamlessnet-client  | [TUN] tun0 configured as 10.10.0.1/24, MTU=1000
+seamlessnet-client  | [16:57:42.152Z] [CLIENT] [CONNECTION] connecting Network A to 172.20.0.10:4433
+seamlessnet-client  | [16:57:42.160Z] [CLIENT] [CONNECTION] QUIC ready start=138368804607
+seamlessnet-client  | [16:57:42.253Z] [CLIENT] [CONFIG] TUN MTU=1000 heartbeat=250ms early_warning=750ms hard_timeout=1500ms debug_packets=0
+seamlessnet-client  | [16:57:42.253Z] [CLIENT] [CONFIG] manual trigger: touch /tmp/seamlessnet-migrate
+seamlessnet-client  | [NETWORK] Test route configured
+seamlessnet-client  | 172.20.0.30 dev tun0 src 10.10.0.1 uid 0 
+seamlessnet-client  |     cache advmss 900 
+seamlessnet-client  | 172.20.0.10 dev eth1 src 172.20.0.20 uid 0 
+seamlessnet-client  |     cache 
+seamlessnet-client  | 172.21.0.10 dev eth0 src 172.21.0.20 uid 0 
+seamlessnet-client  |     cache 
+seamlessnet-client  | [CLIENT] Ready; trigger migration with:
+seamlessnet-client  |          docker compose exec client touch /tmp/seamlessnet-migrate
+seamlessnet-client  | [16:57:45.859Z] [CLIENT] [WARN] drop=1 reason=TUN queue full
+seamlessnet-client  | [16:57:45.859Z] [CLIENT] [WARN] drop=2 reason=TUN queue full
+seamlessnet-client  | [16:57:45.859Z] [CLIENT] [WARN] drop=3 reason=TUN queue full
+seamlessnet-client  | [16:57:47.253Z] [CLIENT] [STATS] tun_in=93446pkt/87828010B tun_out=23807pkt/1243896B quic_tx=93386pkt/87771610B quic_rx=23807pkt/1243896B tx=140.43Mbps rx=1.99Mbps drops=59(+59) q=1/64 peak=64 q_full=59 q_err=0 hb_tx=18 hb_rx=18 hb_ack_age=149ms
+seamlessnet-client  | [16:57:52.252Z] [CLIENT] [STATS] tun_in=302442pkt/284295480B tun_out=82594pkt/4314608B quic_tx=302324pkt/284184560B quic_rx=82594pkt/4314608B tx=454.70Mbps rx=6.90Mbps drops=177(+118) q=1/64 peak=64 q_full=177 q_err=0 hb_tx=38 hb_rx=38 hb_ack_age=149ms
+seamlessnet-client  | [16:57:56.568Z] [CLIENT] [HEALTH] Network A DEGRADED: ack_age=964ms app_rx_age=818ms; switching before hard timeout
+seamlessnet-client  | [16:57:56.568Z] [CLIENT] [FAILOVER] Network A -> B reason=5 attempt=1/3 mono_ms=138383231 ack_age_ms=965 app_rx_age_ms=819
+seamlessnet-client  | [16:57:56.568Z] [CLIENT] [MIGRATION] probe requested reason=5 172.21.0.20:57827 -> 172.21.0.10:4433
+seamlessnet-client  | [16:57:56.568Z] [CLIENT] [MIGRATION] probe returned 0 (0=accepted, not yet validated)
+seamlessnet-client  | [16:57:56.582Z] [CLIENT] [PATH] AVAILABLE id=0 local=172.21.0.20:57827 peer=172.21.0.10:4433
+seamlessnet-client  | [16:57:56.582Z] [CLIENT] [MIGRATION] Network B validated on ORIGINAL QUIC connection start=138368804607 mono_ms=138383245 probe_to_validated_ms=14 last_good_to_validated_ms=833
+seamlessnet-client  | [16:57:57.232Z] [CLIENT] [RECOVERY] first IP reply after Network B validation mono_ms=138383894 probe_to_app_reply_ms=663 validation_to_app_reply_ms=649
+seamlessnet-client  | [16:57:57.253Z] [CLIENT] [STATS] tun_in=236928pkt/222712320B tun_out=67577pkt/3530212B quic_tx=236851pkt/222639940B quic_rx=67577pkt/3530212B tx=356.22Mbps rx=5.65Mbps drops=254(+77) q=1/64 peak=64 q_full=254 q_err=0 hb_tx=57 hb_rx=54 hb_ack_age=80ms
+seamlessnet-client  | [16:58:02.252Z] [CLIENT] [STATS] tun_in=327186pkt/307554840B tun_out=84626pkt/4423108B quic_tx=326962pkt/307344280B quic_rx=84626pkt/4423108B tx=491.75Mbps rx=7.08Mbps drops=478(+224) q=1/64 peak=64 q_full=478 q_err=0 hb_tx=77 hb_rx=73 hb_ack_age=80ms
+seamlessnet-client  | [16:58:07.252Z] [CLIENT] [STATS] tun_in=348250pkt/327355000B tun_out=101508pkt/5300248B quic_tx=348202pkt/327309880B quic_rx=101508pkt/5300248B tx=523.70Mbps rx=8.48Mbps drops=521(+43) q=6/64 peak=64 q_full=521 q_err=0 hb_tx=97 hb_rx=93 hb_ack_age=81ms
+seamlessnet-client  | [16:58:12.251Z] [CLIENT] [STATS] tun_in=342046pkt/321523240B tun_out=95708pkt/4999208B quic_tx=342023pkt/321501620B quic_rx=95708pkt/4999208B tx=514.40Mbps rx=8.00Mbps drops=536(+15) q=14/64 peak=64 q_full=536 q_err=0 hb_tx=117 hb_rx=113 hb_ack_age=80ms
+seamlessnet-client  | [16:58:17.251Z] [CLIENT] [STATS] tun_in=343980pkt/323341200B tun_out=99425pkt/5193140B quic_tx=343926pkt/323290440B quic_rx=99425pkt/5193140B tx=517.26Mbps rx=8.31Mbps drops=579(+43) q=25/64 peak=64 q_full=579 q_err=0 hb_tx=137 hb_rx=133 hb_ack_age=80ms
+seamlessnet-client  | [16:58:22.251Z] [CLIENT] [STATS] tun_in=350506pkt/329475640B tun_out=103377pkt/5398256B quic_tx=350524pkt/329492560B quic_rx=103377pkt/5398256B tx=527.19Mbps rx=8.64Mbps drops=585(+6) q=1/64 peak=64 q_full=585 q_err=0 hb_tx=157 hb_rx=153 hb_ack_age=79ms
+seamlessnet-client  | [16:58:27.251Z] [CLIENT] [STATS] tun_in=342543pkt/321990420B tun_out=98396pkt/5137980B quic_tx=342458pkt/321910520B quic_rx=98396pkt/5137980B tx=515.06Mbps rx=8.22Mbps drops=653(+68) q=18/64 peak=64 q_full=653 q_err=0 hb_tx=177 hb_rx=173 hb_ack_age=78ms
+seamlessnet-client  | [16:58:32.251Z] [CLIENT] [STATS] tun_in=345382pkt/324659080B tun_out=100243pkt/5234392B quic_tx=345373pkt/324650620B quic_rx=100243pkt/5234392B tx=519.44Mbps rx=8.38Mbps drops=679(+26) q=1/64 peak=64 q_full=679 q_err=0 hb_tx=197 hb_rx=193 hb_ack_age=79ms
+seamlessnet-client  | [16:58:37.251Z] [CLIENT] [STATS] tun_in=343993pkt/323353420B tun_out=91624pkt/4787596B quic_tx=343930pkt/323294200B quic_rx=91624pkt/4787596B tx=517.27Mbps rx=7.66Mbps drops=742(+63) q=1/64 peak=64 q_full=742 q_err=0 hb_tx=217 hb_rx=213 hb_ack_age=80ms
+seamlessnet-client  | [16:58:42.249Z] [CLIENT] [STATS] tun_in=350634pkt/329595960B tun_out=93886pkt/4904840B quic_tx=350541pkt/329508540B quic_rx=93886pkt/4904840B tx=527.21Mbps rx=7.85Mbps drops=835(+93) q=1/64 peak=64 q_full=835 q_err=0 hb_tx=237 hb_rx=233 hb_ack_age=80ms
+seamlessnet-client  | [16:58:47.349Z] [CLIENT] [STATS] tun_in=239514pkt/225135504B tun_out=64820pkt/3390678B quic_tx=239474pkt/225097904B quic_rx=64820pkt/3390678B tx=353.16Mbps rx=5.32Mbps drops=876(+41) q=0/64 peak=64 q_full=876 q_err=0 hb_tx=256 hb_rx=252 hb_ack_age=99ms

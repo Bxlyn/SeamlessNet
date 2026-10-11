@@ -1,0 +1,24 @@
+{
+  "mode": "direct",
+  "protocol": "tcp",
+  "run": 3,
+  "events": [
+    {
+      "event": "traffic_started",
+      "time": "2026-10-11T16:41:14.619+00:00"
+    },
+    {
+      "event": "failure_on",
+      "time": "2026-10-11T16:41:25.229+00:00",
+      "elapsed_s": 10.61
+    },
+    {
+      "event": "failure_off",
+      "time": "2026-10-11T16:46:09.801+00:00",
+      "elapsed_s": 295.182
+    }
+  ],
+  "valid": false,
+  "error": "Traffic exceeded 85s wall-clock limit",
+  "finished_at": "2026-10-11T16:46:11.814+00:00"
+}

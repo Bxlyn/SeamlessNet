@@ -1,0 +1,20 @@
+seamlessnet-client  | [BUILD] Compiling client
+seamlessnet-client  | [NETWORK] Waiting for client tun0
+seamlessnet-client  | =============================
+seamlessnet-client  |  SeamlessNet QUIC Client
+seamlessnet-client  | =============================
+seamlessnet-client  | [TUN] Created interface: tun0
+seamlessnet-client  | [TUN] tun0 configured as 10.10.0.1/24, MTU=1000
+seamlessnet-client  | [16:37:12.418Z] [CLIENT] [CONNECTION] connecting Network A to 172.20.0.10:4433
+seamlessnet-client  | [16:37:12.428Z] [CLIENT] [CONNECTION] QUIC ready start=137416005221
+seamlessnet-client  | [16:37:12.518Z] [CLIENT] [CONFIG] TUN MTU=1000 heartbeat=250ms early_warning=750ms hard_timeout=1500ms debug_packets=0
+seamlessnet-client  | [16:37:12.518Z] [CLIENT] [CONFIG] manual trigger: touch /tmp/seamlessnet-migrate
+seamlessnet-client  | [NETWORK] Test route configured
+seamlessnet-client  | 172.20.0.30 dev tun0 src 10.10.0.1 uid 0 
+seamlessnet-client  |     cache advmss 900 
+seamlessnet-client  | 172.20.0.10 dev eth0 src 172.20.0.20 uid 0 
+seamlessnet-client  |     cache 
+seamlessnet-client  | 172.21.0.10 dev eth1 src 172.21.0.20 uid 0 
+seamlessnet-client  |     cache 
+seamlessnet-client  | [CLIENT] Ready; trigger migration with:
+seamlessnet-client  |          docker compose exec client touch /tmp/seamlessnet-migrate

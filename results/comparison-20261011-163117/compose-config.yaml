@@ -1,0 +1,114 @@
+name: seamlessnet
+services:
+  client:
+    build:
+      context: C:\Users\bilal\OneDrive\Desktop\SeamlessNet
+      dockerfile: Dockerfile
+    cap_add:
+      - NET_ADMIN
+    container_name: seamlessnet-client
+    depends_on:
+      server:
+        condition: service_healthy
+        required: true
+      web:
+        condition: service_started
+        required: true
+    devices:
+      - source: /dev/net/tun
+        target: /dev/net/tun
+        permissions: rwm
+    entrypoint:
+      - /bin/sh
+      - /usr/local/SeamlessNet/scripts/start-client.sh
+    environment:
+      SEAMLESSNET_DEBUG_PACKETS: "0"
+      SEAMLESSNET_EARLY_WARNING_MS: "750"
+      SEAMLESSNET_FAILOVER_TIMEOUT_MS: "1500"
+      SEAMLESSNET_HEARTBEAT_INTERVAL_MS: "250"
+    image: seamlessnet:dev
+    init: true
+    networks:
+      seamlessnet-b:
+        ipv4_address: 172.21.0.20
+      seamlessnet-net:
+        ipv4_address: 172.20.0.20
+    user: "0:0"
+    volumes:
+      - type: bind
+        source: C:\Users\bilal\OneDrive\Desktop\SeamlessNet
+        target: /usr/local/SeamlessNet
+        bind:
+          create_host_path: true
+  server:
+    build:
+      context: C:\Users\bilal\OneDrive\Desktop\SeamlessNet
+      dockerfile: Dockerfile
+    cap_add:
+      - NET_ADMIN
+    container_name: seamlessnet-server
+    devices:
+      - source: /dev/net/tun
+        target: /dev/net/tun
+        permissions: rwm
+    entrypoint:
+      - /bin/sh
+      - /usr/local/SeamlessNet/scripts/start-server.sh
+    environment:
+      SEAMLESSNET_DEBUG_PACKETS: "0"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - ss -lun | grep -q ':4433'
+      timeout: 2s
+      interval: 2s
+      retries: 30
+      start_period: 10s
+    image: seamlessnet:dev
+    init: true
+    networks:
+      seamlessnet-b:
+        ipv4_address: 172.21.0.10
+      seamlessnet-net:
+        ipv4_address: 172.20.0.10
+    sysctls:
+      net.ipv4.ip_forward: "1"
+    user: "0:0"
+    volumes:
+      - type: bind
+        source: C:\Users\bilal\OneDrive\Desktop\SeamlessNet
+        target: /usr/local/SeamlessNet
+        bind:
+          create_host_path: true
+  web:
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        apk add --no-cache iperf3
+        mkdir -p /srv
+        printf 'SeamlessNet-HTTP-OK\n' > /srv/index.html
+        dd if=/dev/zero of=/srv/test.bin bs=1024 count=64 2>/dev/null
+        iperf3 -s -D -p 5201
+        exec python -m http.server 8080 --bind 0.0.0.0 --directory /srv
+    container_name: seamlessnet-web
+    image: python:3.12-alpine
+    networks:
+      seamlessnet-b:
+        ipv4_address: 172.21.0.30
+      seamlessnet-net:
+        ipv4_address: 172.20.0.30
+networks:
+  seamlessnet-b:
+    name: seamlessnet-b
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/24
+  seamlessnet-net:
+    name: seamlessnet-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24

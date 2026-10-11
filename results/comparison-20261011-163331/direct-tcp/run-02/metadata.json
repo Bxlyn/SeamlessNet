@@ -1,0 +1,24 @@
+{
+  "mode": "direct",
+  "protocol": "tcp",
+  "run": 2,
+  "events": [
+    {
+      "event": "traffic_started",
+      "time": "2026-10-11T16:40:10.605+00:00"
+    },
+    {
+      "event": "failure_on",
+      "time": "2026-10-11T16:40:21.125+00:00",
+      "elapsed_s": 10.519
+    },
+    {
+      "event": "failure_off",
+      "time": "2026-10-11T16:40:41.755+00:00",
+      "elapsed_s": 31.149
+    }
+  ],
+  "valid": true,
+  "traffic_exit_code": 0,
+  "finished_at": "2026-10-11T16:41:10.823+00:00"
+}

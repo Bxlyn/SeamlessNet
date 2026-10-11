@@ -1,0 +1,3 @@
+/seamlessnet-client running
+/seamlessnet-server running
+/seamlessnet-web running

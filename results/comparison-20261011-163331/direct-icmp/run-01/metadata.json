@@ -1,0 +1,24 @@
+{
+  "mode": "direct",
+  "protocol": "icmp",
+  "run": 1,
+  "events": [
+    {
+      "event": "traffic_started",
+      "time": "2026-10-11T16:33:34.247+00:00"
+    },
+    {
+      "event": "failure_on",
+      "time": "2026-10-11T16:33:44.760+00:00",
+      "elapsed_s": 10.513
+    },
+    {
+      "event": "failure_off",
+      "time": "2026-10-11T16:34:05.364+00:00",
+      "elapsed_s": 31.115
+    }
+  ],
+  "valid": true,
+  "traffic_exit_code": 0,
+  "finished_at": "2026-10-11T16:34:19.469+00:00"
+}

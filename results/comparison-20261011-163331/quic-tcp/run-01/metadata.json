@@ -1,0 +1,26 @@
+{
+  "mode": "quic",
+  "protocol": "tcp",
+  "run": 1,
+  "events": [
+    {
+      "event": "traffic_started",
+      "time": "2026-10-11T16:55:11.693+00:00"
+    },
+    {
+      "event": "failure_on",
+      "time": "2026-10-11T16:55:22.041+00:00",
+      "elapsed_s": 10.348
+    },
+    {
+      "event": "failure_off",
+      "time": "2026-10-11T16:55:42.282+00:00",
+      "elapsed_s": 30.588
+    }
+  ],
+  "valid": true,
+  "traffic_exit_code": 0,
+  "completed_normally": true,
+  "actual_outage_seconds": 20.24,
+  "finished_at": "2026-10-11T16:56:12.234+00:00"
+}

@@ -45,6 +45,8 @@ services:
     networks:
       seamlessnet-net:
         ipv4_address: 172.20.0.30
+      seamlessnet-b:
+        ipv4_address: 172.21.0.30
 
   client:
     build: .

@@ -1,0 +1,100 @@
+seamlessnet-client  | [BUILD] Compiling client
+seamlessnet-client  | [NETWORK] Waiting for client tun0
+seamlessnet-client  | =============================
+seamlessnet-client  |  SeamlessNet QUIC Client
+seamlessnet-client  | =============================
+seamlessnet-client  | [TUN] Created interface: tun0
+seamlessnet-client  | [TUN] tun0 configured as 10.10.0.1/24, MTU=1000
+seamlessnet-client  | [16:36:10.616Z] [CLIENT] [CONNECTION] connecting Network A to 172.20.0.10:4433
+seamlessnet-client  | [16:36:10.625Z] [CLIENT] [CONNECTION] QUIC ready start=137354202207
+seamlessnet-client  | [16:36:10.716Z] [CLIENT] [CONFIG] TUN MTU=1000 heartbeat=250ms early_warning=750ms hard_timeout=1500ms debug_packets=0
+seamlessnet-client  | [16:36:10.716Z] [CLIENT] [CONFIG] manual trigger: touch /tmp/seamlessnet-migrate
+seamlessnet-client  | [NETWORK] Test route configured
+seamlessnet-client  | 172.20.0.30 dev tun0 src 10.10.0.1 uid 0 
+seamlessnet-client  |     cache advmss 900 
+seamlessnet-client  | 172.20.0.10 dev eth0 src 172.20.0.20 uid 0 
+seamlessnet-client  |     cache 
+seamlessnet-client  | 172.21.0.10 dev eth1 src 172.21.0.20 uid 0 
+seamlessnet-client  |     cache 
+seamlessnet-server  | [BUILD] Compiling server
+seamlessnet-server  | [NETWORK] Configuring forwarding and NAT
+seamlessnet-server  | [SERVER] Starting SeamlessNet
+seamlessnet-server  | =============================
+seamlessnet-server  |  SeamlessNet QUIC Server
+seamlessnet-server  | =============================
+seamlessnet-server  | [SERVER TUN] Created interface: tun0
+seamlessnet-server  | [SERVER TUN] tun0 configured as 10.10.0.2/24, MTU=1000
+seamlessnet-server  | [16:36:06.218Z] [SERVER] [CONNECTION] listening UDP 4433 on Networks A and B
+seamlessnet-server  | [16:36:06.236Z] [SERVER] [CONFIG] TUN MTU=1000 debug_packets=0
+seamlessnet-server  | [16:36:07.240Z] [SERVER] [STATS] tun_in=0pkt/0B tun_out=0pkt/0B quic_tx=0pkt/0B quic_rx=0pkt/0B tx=0.00Mbps rx=0.00Mbps drops=0(+0) q=0/64 peak=0 q_full=0 q_err=0 hb_tx=0 hb_rx=0 hb_ack_age=0ms
+seamlessnet-server  | [16:36:08.245Z] [SERVER] [STATS] tun_in=0pkt/0B tun_out=0pkt/0B quic_tx=0pkt/0B quic_rx=0pkt/0B tx=0.00Mbps rx=0.00Mbps drops=0(+0) q=0/64 peak=0 q_full=0 q_err=0 hb_tx=0 hb_rx=0 hb_ack_age=0ms
+seamlessnet-server  | [16:36:09.248Z] [SERVER] [STATS] tun_in=0pkt/0B tun_out=0pkt/0B quic_tx=0pkt/0B quic_rx=0pkt/0B tx=0.00Mbps rx=0.00Mbps drops=0(+0) q=0/64 peak=0 q_full=0 q_err=0 hb_tx=0 hb_rx=0 hb_ack_age=0ms
+seamlessnet-server  | [16:36:10.251Z] [SERVER] [STATS] tun_in=0pkt/0B tun_out=0pkt/0B quic_tx=0pkt/0B quic_rx=0pkt/0B tx=0.00Mbps rx=0.00Mbps drops=0(+0) q=0/64 peak=0 q_full=0 q_err=0 hb_tx=0 hb_rx=0 hb_ack_age=0ms
+seamlessnet-server  | [16:36:10.625Z] [SERVER] [CONNECTION] QUIC ready start=137354223469
+seamlessnet-server  | [16:36:11.254Z] [SERVER] [STATS] tun_in=0pkt/0B tun_out=0pkt/0B quic_tx=0pkt/0B quic_rx=0pkt/0B tx=0.00Mbps rx=0.00Mbps drops=0(+0) q=0/64 peak=0 q_full=0 q_err=0 hb_tx=2 hb_rx=2 hb_ack_age=0ms
+seamlessnet-server  | [16:36:12.259Z] [SERVER] [STATS] tun_in=0pkt/0B tun_out=0pkt/0B quic_tx=0pkt/0B quic_rx=0pkt/0B tx=0.00Mbps rx=0.00Mbps drops=0(+0) q=0/64 peak=0 q_full=0 q_err=0 hb_tx=6 hb_rx=6 hb_ack_age=0ms
+seamlessnet-server  | [16:36:13.349Z] [SERVER] [STATS] tun_in=2pkt/168B tun_out=2pkt/168B quic_tx=1pkt/84B quic_rx=2pkt/168B tx=0.00Mbps rx=0.00Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=9 hb_rx=9 hb_ack_age=0ms
+seamlessnet-server  | [16:36:14.363Z] [SERVER] [STATS] tun_in=3pkt/252B tun_out=3pkt/252B quic_tx=3pkt/252B quic_rx=3pkt/252B tx=0.00Mbps rx=0.00Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=13 hb_rx=13 hb_ack_age=0ms
+seamlessnet-server  | [16:36:15.380Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=17 hb_rx=17 hb_ack_age=0ms
+seamlessnet-server  | [16:36:16.400Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=21 hb_rx=21 hb_ack_age=0ms
+seamlessnet-server  | [16:36:17.417Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=25 hb_rx=25 hb_ack_age=0ms
+seamlessnet-server  | [16:36:18.440Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=29 hb_rx=29 hb_ack_age=0ms
+seamlessnet-server  | [16:36:19.455Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=33 hb_rx=33 hb_ack_age=0ms
+seamlessnet-server  | [16:36:20.472Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=37 hb_rx=37 hb_ack_age=0ms
+seamlessnet-client  | [CLIENT] Ready; trigger migration with:
+seamlessnet-client  |          docker compose exec client touch /tmp/seamlessnet-migrate
+seamlessnet-server  | [16:36:21.494Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=41 hb_rx=41 hb_ack_age=0ms
+seamlessnet-client  | [16:36:15.737Z] [CLIENT] [STATS] tun_in=32pkt/2688B tun_out=31pkt/2604B quic_tx=31pkt/2604B quic_rx=31pkt/2604B tx=0.00Mbps rx=0.00Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=18 hb_rx=18 hb_ack_age=153ms
+seamlessnet-client  | [16:36:20.780Z] [CLIENT] [STATS] tun_in=99pkt/8316B tun_out=99pkt/8316B quic_tx=99pkt/8316B quic_rx=99pkt/8316B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=38 hb_rx=38 hb_ack_age=101ms
+seamlessnet-client  | [16:36:25.175Z] [CLIENT] [HEALTH] Network A DEGRADED: ack_age=938ms app_rx_age=837ms; switching before hard timeout
+seamlessnet-client  | [16:36:25.175Z] [CLIENT] [FAILOVER] Network A -> B reason=5 attempt=1/3 mono_ms=137368781 ack_age_ms=939 app_rx_age_ms=838
+seamlessnet-server  | [16:36:22.510Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=45 hb_rx=45 hb_ack_age=0ms
+seamlessnet-server  | [16:36:23.525Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=49 hb_rx=49 hb_ack_age=0ms
+seamlessnet-server  | [16:36:24.538Z] [SERVER] [STATS] tun_in=16pkt/1344B tun_out=16pkt/1344B quic_tx=17pkt/1428B quic_rx=16pkt/1344B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=0/64 peak=1 q_full=0 q_err=0 hb_tx=52 hb_rx=52 hb_ack_age=0ms
+seamlessnet-server  | [16:36:25.187Z] [SERVER] [PATH] AVAILABLE id=0 local=172.21.0.10:4433 peer=172.21.0.20:58713 start=137354223469
+seamlessnet-server  | [16:36:25.586Z] [SERVER] [STATS] tun_in=8pkt/672B tun_out=8pkt/672B quic_tx=7pkt/588B quic_rx=8pkt/672B tx=0.00Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=54 hb_rx=54 hb_ack_age=0ms
+seamlessnet-server  | [16:36:26.601Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=58 hb_rx=58 hb_ack_age=0ms
+seamlessnet-server  | [16:36:27.629Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=62 hb_rx=62 hb_ack_age=0ms
+seamlessnet-server  | [16:36:28.652Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=66 hb_rx=66 hb_ack_age=0ms
+seamlessnet-server  | [16:36:29.667Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=70 hb_rx=70 hb_ack_age=0ms
+seamlessnet-client  | [16:36:25.175Z] [CLIENT] [MIGRATION] probe requested reason=5 172.21.0.20:58713 -> 172.21.0.10:4433
+seamlessnet-client  | [16:36:25.175Z] [CLIENT] [MIGRATION] probe returned 0 (0=accepted, not yet validated)
+seamlessnet-client  | [16:36:25.187Z] [CLIENT] [PATH] AVAILABLE id=0 local=172.21.0.20:58713 peer=172.21.0.10:4433
+seamlessnet-client  | [16:36:25.187Z] [CLIENT] [MIGRATION] Network B validated on ORIGINAL QUIC connection start=137354202207 mono_ms=137368792 probe_to_validated_ms=11 last_good_to_validated_ms=849
+seamlessnet-server  | [16:36:30.687Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=74 hb_rx=74 hb_ack_age=0ms
+seamlessnet-server  | [16:36:31.711Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=78 hb_rx=78 hb_ack_age=0ms
+seamlessnet-server  | [16:36:32.730Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=82 hb_rx=82 hb_ack_age=0ms
+seamlessnet-server  | [16:36:33.753Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=86 hb_rx=86 hb_ack_age=0ms
+seamlessnet-server  | [16:36:34.769Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=90 hb_rx=90 hb_ack_age=0ms
+seamlessnet-server  | [16:36:35.792Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=94 hb_rx=94 hb_ack_age=0ms
+seamlessnet-server  | [16:36:36.813Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=98 hb_rx=98 hb_ack_age=0ms
+seamlessnet-server  | [16:36:37.831Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=102 hb_rx=102 hb_ack_age=0ms
+seamlessnet-client  | [16:36:25.232Z] [CLIENT] [RECOVERY] first IP reply after Network B validation mono_ms=137368837 probe_to_app_reply_ms=56 validation_to_app_reply_ms=45
+seamlessnet-client  | [16:36:25.789Z] [CLIENT] [STATS] tun_in=97pkt/8148B tun_out=82pkt/6888B quic_tx=97pkt/8148B quic_rx=82pkt/6888B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=57 hb_rx=54 hb_ack_age=203ms
+seamlessnet-client  | [16:36:30.838Z] [CLIENT] [STATS] tun_in=99pkt/8316B tun_out=99pkt/8316B quic_tx=99pkt/8316B quic_rx=99pkt/8316B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=77 hb_rx=74 hb_ack_age=151ms
+seamlessnet-client  | [16:36:35.841Z] [CLIENT] [STATS] tun_in=98pkt/8232B tun_out=98pkt/8232B quic_tx=98pkt/8232B quic_rx=98pkt/8232B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=97 hb_rx=94 hb_ack_age=50ms
+seamlessnet-client  | [16:36:40.892Z] [CLIENT] [STATS] tun_in=99pkt/8316B tun_out=99pkt/8316B quic_tx=99pkt/8316B quic_rx=99pkt/8316B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=116 hb_rx=113 hb_ack_age=256ms
+seamlessnet-client  | [16:36:45.938Z] [CLIENT] [STATS] tun_in=99pkt/8316B tun_out=99pkt/8316B quic_tx=99pkt/8316B quic_rx=99pkt/8316B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=136 hb_rx=133 hb_ack_age=204ms
+seamlessnet-client  | [16:36:50.984Z] [CLIENT] [STATS] tun_in=99pkt/8316B tun_out=99pkt/8316B quic_tx=99pkt/8316B quic_rx=99pkt/8316B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=156 hb_rx=153 hb_ack_age=152ms
+seamlessnet-client  | [16:36:56.029Z] [CLIENT] [STATS] tun_in=99pkt/8316B tun_out=99pkt/8316B quic_tx=99pkt/8316B quic_rx=99pkt/8316B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=176 hb_rx=173 hb_ack_age=100ms
+seamlessnet-server  | [16:36:38.850Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=106 hb_rx=106 hb_ack_age=0ms
+seamlessnet-server  | [16:36:39.865Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=110 hb_rx=110 hb_ack_age=0ms
+seamlessnet-server  | [16:36:40.892Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=114 hb_rx=114 hb_ack_age=0ms
+seamlessnet-server  | [16:36:41.912Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=118 hb_rx=118 hb_ack_age=0ms
+seamlessnet-server  | [16:36:42.934Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=122 hb_rx=122 hb_ack_age=0ms
+seamlessnet-server  | [16:36:43.953Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=126 hb_rx=126 hb_ack_age=0ms
+seamlessnet-server  | [16:36:44.965Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=130 hb_rx=130 hb_ack_age=0ms
+seamlessnet-server  | [16:36:45.990Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=134 hb_rx=134 hb_ack_age=0ms
+seamlessnet-server  | [16:36:47.016Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=138 hb_rx=138 hb_ack_age=0ms
+seamlessnet-server  | [16:36:48.033Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=142 hb_rx=142 hb_ack_age=0ms
+seamlessnet-server  | [16:36:49.054Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=146 hb_rx=146 hb_ack_age=0ms
+seamlessnet-server  | [16:36:50.074Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=150 hb_rx=150 hb_ack_age=0ms
+seamlessnet-server  | [16:36:51.088Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=154 hb_rx=154 hb_ack_age=0ms
+seamlessnet-server  | [16:36:52.109Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=158 hb_rx=158 hb_ack_age=0ms
+seamlessnet-server  | [16:36:53.125Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=162 hb_rx=162 hb_ack_age=0ms
+seamlessnet-server  | [16:36:54.153Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=166 hb_rx=166 hb_ack_age=0ms
+seamlessnet-server  | [16:36:55.165Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=170 hb_rx=170 hb_ack_age=0ms
+seamlessnet-server  | [16:36:56.181Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=174 hb_rx=174 hb_ack_age=0ms
+seamlessnet-server  | [16:36:57.197Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=178 hb_rx=178 hb_ack_age=0ms
+seamlessnet-server  | [16:36:58.216Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=182 hb_rx=182 hb_ack_age=0ms
+seamlessnet-server  | [16:36:59.246Z] [SERVER] [STATS] tun_in=20pkt/1680B tun_out=20pkt/1680B quic_tx=20pkt/1680B quic_rx=20pkt/1680B tx=0.01Mbps rx=0.01Mbps drops=0(+0) q=1/64 peak=1 q_full=0 q_err=0 hb_tx=186 hb_rx=186 hb_ack_age=0ms

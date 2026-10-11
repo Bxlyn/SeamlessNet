@@ -1,0 +1,26 @@
+{
+  "mode": "quic",
+  "protocol": "udp",
+  "run": 3,
+  "events": [
+    {
+      "event": "traffic_started",
+      "time": "2026-10-11T17:04:50.994+00:00"
+    },
+    {
+      "event": "failure_on",
+      "time": "2026-10-11T17:05:01.384+00:00",
+      "elapsed_s": 10.39
+    },
+    {
+      "event": "failure_off",
+      "time": "2026-10-11T17:05:21.684+00:00",
+      "elapsed_s": 30.689
+    }
+  ],
+  "valid": true,
+  "traffic_exit_code": 0,
+  "completed_normally": true,
+  "actual_outage_seconds": 20.299,
+  "finished_at": "2026-10-11T17:05:51.800+00:00"
+}
