@@ -1,4 +1,4 @@
-# SeamlessNet — Stage 1 demo
+# SeamlessNet — Stage 1 demo Ex
 
 This walkthrough documents the **actual Windows PowerShell / Docker demo**. SeamlessNet automatically detects a silent failure on Network A, validates Network B, and continues application traffic over the **same QUIC connection**.
 
